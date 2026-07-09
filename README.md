@@ -45,11 +45,18 @@ It can **import an existing `The Dude` database** (`dude.db`) so you don't have 
 
 ## Requirements
 
-- PHP **8.1+** with PDO (`pdo_sqlite` or `pdo_mysql`)
-- A web server (nginx + php-fpm recommended; Apache works too)
-- Optional: `fping` for fast ICMP monitoring (`apt install fping`)
-- Optional: `net-snmp` CLI tools (`snmpget`, `snmpwalk`) or the PHP `snmp` extension for traffic polling
-- SQLite works out of the box; MySQL/MariaDB is supported for larger / multi-user setups
+- **PHP 8.1+** (CLI + FPM) with **PDO**: `pdo_sqlite` (default) or `pdo_mysql`
+- A web server — **nginx + php-fpm** recommended (Apache + mod_php works too)
+- For live **ICMP** status: **`fping`** (`apt install fping`) and PHP's `exec()` must be enabled (not listed in `disable_functions`). Without it, NetPulse automatically falls back to TCP-connect checks, so it still works on locked-down/shared hosting.
+- For **SNMP traffic**: the **net-snmp** CLI tools **`snmpget` / `snmpwalk`** (`apt install snmp`) *or* the PHP `snmp` extension
+- SQLite works out of the box (no DB server); MySQL/MariaDB is optional for larger / multi-user setups
+
+On Debian/Ubuntu a typical install:
+
+```bash
+sudo apt install php-cli php-fpm php-sqlite3 fping snmp
+# optional: php-mysql (for MySQL) ,  php-snmp (instead of the net-snmp CLI tools)
+```
 
 ## Quick start (SQLite)
 
@@ -77,17 +84,85 @@ php import_dude.php data/dude.db
 
 ...or use **Settings -> Backup & import -> Import from Dude** in the web UI. Your `dude.db` is private and is **git-ignored** — it never ends up in the repository.
 
-## Production (nginx + php-fpm + systemd)
+## Production (nginx + php-fpm)
 
-1. Point an nginx `server {}` block at the project folder with a PHP-FPM pool.
-2. Ensure `data/` is writable by the FPM pool user.
-3. Enable background workers:
-   - **Monitor** — `php monitor.php loop` (availability checks)
-   - **SNMP poller** — `php snmp_poll.php loop` (reads the poll interval from Settings)
+**1. Web app** — point an nginx `server {}` block at the project folder using a PHP-FPM pool:
 
-Run both as `systemd` services (or cron) so monitoring and traffic history keep updating.
+```nginx
+server {
+    listen 80;
+    server_name netpulse.example.com;
+    root /home/youruser/netpulse;
+    index index.php;
+    client_max_body_size 64m;                 # matches .user.ini (import dude.db / restore backup)
 
-Configuration lives in `config.php` — set the DB driver, MySQL credentials (if used), check method (`auto` / `tcp` / `icmp`), and the down-after grace period. Sensible defaults are provided; several values can also be overridden via environment variables.
+    location / { try_files $uri $uri/ /index.php?$query_string; }
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/run/php/php8.2-fpm.sock;   # adjust to your FPM socket
+    }
+    location ~ ^/(data|\.git) { deny all; }   # never serve the database / sessions / git
+}
+```
+
+**2. Permissions** — `data/` must be writable by the FPM pool user (sessions are auto-created in `data/sessions`):
+
+```bash
+chmod -R u+rwX data && sudo chown -R www-data:www-data data   # use your FPM user
+```
+
+**3. Background workers** — monitoring runs from the CLI, **not** from web requests. There are two:
+
+- **Availability monitor** — `monitor.php` does **one pass per run** (it does *not* loop). Run it on a schedule.
+
+  Cron (60-second granularity):
+
+  ```cron
+  * * * * * cd /home/youruser/netpulse && php monitor.php >/dev/null 2>&1
+  ```
+
+  …or, for faster (~15 s) down-detection, a systemd service that loops:
+
+  ```ini
+  # /etc/systemd/system/netpulse-monitor.service
+  [Unit]
+  Description=NetPulse availability monitor
+  After=network.target
+  [Service]
+  User=www-data
+  WorkingDirectory=/home/youruser/netpulse
+  ExecStart=/bin/sh -c 'while true; do php monitor.php; sleep 15; done'
+  Restart=always
+  [Install]
+  WantedBy=multi-user.target
+  ```
+
+- **SNMP traffic poller** — `snmp_poll.php` **has a built-in loop**; the interval comes from Settings:
+
+  ```ini
+  # /etc/systemd/system/netpulse-snmp.service
+  [Unit]
+  Description=NetPulse SNMP traffic poller
+  After=network.target
+  [Service]
+  User=www-data
+  WorkingDirectory=/home/youruser/netpulse
+  ExecStart=/usr/bin/php snmp_poll.php loop
+  Restart=always
+  [Install]
+  WantedBy=multi-user.target
+  ```
+
+Enable both:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now netpulse-monitor netpulse-snmp
+```
+
+> Note: `fping` needs raw-socket rights. The Debian `fping` package ships with the needed capability by default; if ICMP still fails, NetPulse falls back to TCP checks automatically.
+
+Configuration lives in `config.php` — DB driver, MySQL credentials (if used), check method (`auto` / `tcp` / `icmp`) and the down-after grace period. Telegram, SNMP profiles and the poll interval are set in the **Settings** screen.
 
 ## Configuration highlights (`config.php`)
 
