@@ -1,0 +1,20 @@
+# Runtime databases & state (never commit real network data)
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+data/sessions/
+
+# Dude source database (user-provided, private)
+dude.db
+
+# Dev / preview artifacts
+nahlad_*.png
+*.zip
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
