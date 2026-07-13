@@ -26,7 +26,7 @@ if (current_user()) { header('Location: index.php'); exit; }
   </div>
   <?php if ($err): ?><div class="login-err"><?= htmlspecialchars($err) ?></div><?php endif; ?>
   <label>Používateľské meno
-    <input name="username" required autofocus value="admin">
+    <input name="username" required autofocus>
   </label>
   <label>Heslo
     <input type="password" name="password" required>
