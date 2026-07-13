@@ -23,7 +23,7 @@ if (current_user()) { header('Location: index.php'); exit; }
   <div class="login-brand">
     <img src="favicon.svg" class="logo-big" alt="">
     <span class="brand-dude"><?= htmlspecialchars(cfg('APP_NAME') ?: 'NetPulse') ?></span>
-    <div class="brand-sub" data-i18n="@login_sub">monitoring siete a zariadení</div>
+    <div class="brand-sub" data-i18n="@login_sub">monitoring siete a zariadeni</div>
   </div>
   <?php if ($err): ?><div class="login-err" data-i18n="Nesprávne meno alebo heslo."><?= htmlspecialchars($err) ?></div><?php endif; ?>
   <label><span data-i18n="Používateľské meno">Používateľské meno</span>
@@ -34,4 +34,7 @@ if (current_user()) { header('Location: index.php'); exit; }
   </label>
   <label class="login-remember"><input type="checkbox" name="remember" value="1"> <span data-i18n="Zapamätať prihlásenie">Zapamätať prihlásenie</span></label>
   <button type="submit" data-i18n="Prihlásiť sa">Prihlásiť sa</button>
-  <div class="login-hint" da
+  <div class="login-hint" data-i18n-html="@login_hint">Predvolené: <b>admin</b> / <b>admin</b></div>
+</form>
+<script src="assets/i18n.js?v=<?= @filemtime(__DIR__.'/assets/i18n.js') ?>"></script>
+</body></html>

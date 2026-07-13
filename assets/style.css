@@ -12,8 +12,8 @@ button{font-family:inherit}
 
 /* ---------- LOGIN ---------- */
 .login-body{display:flex;align-items:center;justify-content:center;background:var(--bg)}
-.login-card{background:var(--panel);border:1px solid var(--border);border-radius:16px;
-  padding:34px 30px;width:340px;display:flex;flex-direction:column;gap:14px;
+.login-card{position:relative;background:var(--panel);border:1px solid var(--border);border-radius:16px;
+  padding:40px 30px 34px;width:340px;display:flex;flex-direction:column;gap:14px;
   box-shadow:0 24px 60px rgba(0,0,0,.5)}
 .login-brand{text-align:center;margin-bottom:6px}
 .brand-dude{font-size:30px;font-weight:800;letter-spacing:-1px;color:var(--text)}
@@ -405,12 +405,22 @@ th .arr{color:var(--accent);font-size:10px;margin-left:3px}
 #graph-canvas{width:100%;height:calc(100% - 20px);min-height:320px;background:var(--panel);border:1px solid var(--border);border-radius:12px;display:block}
 
 /* --- jazykový prepínač (i18n) --- */
-.lang-select{background:var(--card,#161c2b);color:var(--text,#e6ebf5);border:1px solid var(--border,#2a3247);border-radius:8px;padding:5px 8px;font-size:13px;cursor:pointer;outline:none}
-.lang-select:hover{border-color:var(--accent,#7c5cff)}
+.lang-select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;
+  padding:6px 28px 6px 10px;font-size:13px;line-height:1.2;cursor:pointer;outline:none;
+  -webkit-appearance:none;-moz-appearance:none;appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b95ab' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat:no-repeat;background-position:right 9px center}
+.lang-select:hover{border-color:var(--accent)}
+.lang-select:focus{border-color:var(--accent)}
 .top-right .lang-select{margin-right:2px}
-.login-lang{display:flex;justify-content:flex-end;margin:-4px 0 2px}
 .settings-hint{color:var(--muted);font-size:13px;margin:0 0 12px}
 
-/* --- login: zapamätať prihlásenie --- */
-.login-remember{display:flex;align-items:center;gap:8px;flex-direction:row;font-size:13px;color:var(--muted);margin:-4px 0 4px;cursor:pointer;user-select:none}
-.login-remember input{width:16px;height:16px;margin:0;accent-color:var(--accent,#7c5cff);cursor:pointer}
+/* --- login: jazyk vpravo hore --- */
+.login-lang{position:absolute;top:14px;right:14px;margin:0;z-index:2}
+
+/* --- login: zapamätať prihlásenie (prebíja generické .login-card label/input) --- */
+.login-card label.login-remember{flex-direction:row;align-items:center;gap:9px;font-size:13px;
+  color:var(--muted);cursor:pointer;user-select:none;margin:2px 0}
+.login-card label.login-remember input{-webkit-appearance:checkbox;-moz-appearance:checkbox;appearance:checkbox;
+  width:16px;height:16px;min-width:16px;padding:0;margin:0;border:0;border-radius:0;background:none;
+  accent-color:var(--accent);cursor:pointer}
