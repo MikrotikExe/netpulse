@@ -380,7 +380,7 @@ function fitView(){
   const xs=ns.map(n=>n.x),ys=ns.map(n=>n.y);
   const minx=Math.min(...xs),maxx=Math.max(...xs),miny=Math.min(...ys),maxy=Math.max(...ys);
   const w=svgEl.clientWidth||900,h=svgEl.clientHeight||600;
-  const k=Math.min(w/(maxx-minx+260),h/(maxy-miny+200),1.3);
+  let k=Math.min(w/(maxx-minx+260),h/(maxy-miny+200),1.3); if(w<600)k=Math.max(k,0.55);
   S.view={k,x:w/2-(minx+maxx)/2*k,y:h/2-(miny+maxy)/2*k};
 }
 

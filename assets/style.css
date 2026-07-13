@@ -255,35 +255,41 @@ input[type=file]::file-selector-button:hover{border-color:var(--accent);color:va
 #btn-maps-toggle{display:none}
 @media (max-width: 860px){
   /* topbar */
-  #topbar{gap:10px;padding:0 10px;height:50px}
+  #topbar{gap:10px;padding:6px 10px;height:auto;flex-wrap:wrap;row-gap:6px}
   #topbar .brand-dude{font-size:16px}
   .logo{width:22px;height:22px}
-  .summary{gap:6px;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .brand{order:1}
+  .top-right{order:2;margin-left:auto}
+  .summary{order:3;flex-basis:100%;width:100%;gap:6px;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-top:6px;border-top:1px solid var(--border)}
   .summary::-webkit-scrollbar{display:none}
   .chip{flex:0 0 auto;padding:4px 9px;font-size:12px}
   .user{display:none}
 
   /* sekcie -> spodná navigačná lišta */
-  #sections{position:fixed;left:0;right:0;bottom:0;top:auto;width:auto;height:56px;
-    flex-direction:row;justify-content:space-around;align-items:stretch;padding:4px 2px;gap:0;
-    border-right:none;border-top:1px solid var(--border);z-index:40;background:var(--panel)}
-  #sections button{flex:1;padding:4px 2px;font-size:9px;flex-direction:column;gap:2px;justify-content:center}
-  #sections button span{font-size:18px;width:auto}
+  #sections{position:fixed;left:0;right:0;bottom:0;top:auto;width:auto;height:60px;
+    flex-direction:row;justify-content:space-around;align-items:stretch;padding:0;gap:0;
+    border-right:none;border-top:1px solid var(--border);z-index:40;background:var(--panel);
+    box-shadow:0 -6px 20px rgba(0,0,0,.30)}
+  #sections button{flex:1;min-width:0;padding:6px 1px;font-size:10px;flex-direction:column;gap:3px;justify-content:center;color:var(--muted);border-radius:0}
+  #sections button .ic{width:21px;height:21px}
+  #sections button span{font-size:9.5px;width:auto;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  #sections button:hover{background:none;color:var(--text)}
+  #sections button.active{background:none;color:var(--accent)}
 
   /* zoznam máp -> výsuvná zásuvka */
-  #sidebar{position:fixed;top:50px;bottom:56px;left:0;width:80%;max-width:300px;z-index:45;
+  #sidebar{position:fixed;top:50px;bottom:60px;left:0;width:80%;max-width:300px;z-index:45;
     transform:translateX(-102%);transition:transform .22s ease;box-shadow:6px 0 30px rgba(0,0,0,.6)}
   #sidebar.open{transform:translateX(0)}
 
   /* hlavná plocha na plnú šírku, miesto pre spodnú lištu */
-  #main{padding-bottom:56px;min-width:0}
+  #main{padding-bottom:60px;min-width:0}
   #btn-maps-toggle{display:inline-flex;font-size:16px;padding:6px 11px}
   #map-tools{gap:6px;padding:7px 8px;overflow-x:auto}
   .tools button{padding:7px 10px;font-size:12px;flex:0 0 auto}
   .mode{width:100%;order:9;font-size:12px}
 
   /* inšpektor -> spodný panel */
-  #inspector{position:fixed;left:0;right:0;bottom:56px;top:auto;width:100%;height:64vh;
+  #inspector{position:fixed;left:0;right:0;bottom:60px;top:auto;width:100%;height:64vh;
     border-left:none;border-top:1px solid var(--border);border-radius:16px 16px 0 0;z-index:46;
     box-shadow:0 -8px 30px rgba(0,0,0,.5)}
 
@@ -306,6 +312,18 @@ input[type=file]::file-selector-button:hover{border-color:var(--accent);color:va
 
   /* login */
   .login-card{width:92vw}
+}
+
+@media (max-width: 600px){
+  /* stavové čipy na samostatný riadok pod jazyk/odhlásiť */
+  #topbar{flex-wrap:wrap;height:auto;gap:8px;padding:6px 10px;row-gap:6px}
+  .brand{order:1}
+  .top-right{order:2;margin-left:auto;gap:9px}
+  .summary{order:3;flex-basis:100%;width:100%;margin:0;padding-bottom:2px}
+  .chip{padding:4px 10px;font-size:12px}
+  .lang-select{max-width:118px;padding:5px 24px 5px 9px;font-size:12px}
+  .theme-btn{width:32px;height:30px}
+  .logout{padding:5px 9px}
 }
 
 /* ================= SVETLÁ TÉMA ================= */
@@ -336,7 +354,7 @@ input[type=file]::file-selector-button:hover{border-color:var(--accent);color:va
 
 /* ---------- mobil: kompaktná hlavička ---------- */
 @media (max-width: 860px){
-  .clabel{display:none}                 /* v čipoch len bodka + číslo */
+  .clabel{display:inline}               /* v čipoch aj text */
   .chip{padding:4px 9px;gap:6px;font-size:12px}
   .chip b{font-size:13px}
   #topbar{gap:8px}
@@ -351,12 +369,12 @@ input[type=file]::file-selector-button:hover{border-color:var(--accent);color:va
 
 /* ---------- úzke telefóny: hlavička sa vždy zmestí ---------- */
 @media (max-width: 860px){
-  .summary{flex:1;min-width:0}          /* čipy scrollujú vnútri, ovládače ostanú vidno */
+  .summary{order:3;flex-basis:100%;width:100%;min-width:0}   /* súhrn na vlastný riadok */
   #topbar .brand{flex:0 0 auto}
   .top-right{flex:0 0 auto}
 }
 @media (max-width: 520px){
-  .summary .chip:first-child{display:none}   /* skry celkový počet (je v sekcii Zariadenia) */
+  .summary .chip:first-child{display:flex}   /* ponechaj celkový počet */
   .chip{padding:4px 8px}
 }
 
