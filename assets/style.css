@@ -410,3 +410,7 @@ th .arr{color:var(--accent);font-size:10px;margin-left:3px}
 .top-right .lang-select{margin-right:2px}
 .login-lang{display:flex;justify-content:flex-end;margin:-4px 0 2px}
 .settings-hint{color:var(--muted);font-size:13px;margin:0 0 12px}
+
+/* --- login: zapamätať prihlásenie --- */
+.login-remember{display:flex;align-items:center;gap:8px;flex-direction:row;font-size:13px;color:var(--muted);margin:-4px 0 4px;cursor:pointer;user-select:none}
+.login-remember input{width:16px;height:16px;margin:0;accent-color:var(--accent,#7c5cff);cursor:pointer}

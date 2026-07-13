@@ -2,7 +2,7 @@
 require __DIR__ . '/auth.php';
 $err = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (try_login($_POST['username'] ?? '', $_POST['password'] ?? '')) {
+    if (try_login($_POST['username'] ?? '', $_POST['password'] ?? '', !empty($_POST['remember']))) {
         header('Location: index.php'); exit;
     }
     $err = 'Nesprávne meno alebo heslo.';
@@ -19,19 +19,19 @@ if (current_user()) { header('Location: index.php'); exit; }
 </head>
 <body class="login-body">
 <form class="login-card" method="post" autocomplete="off">
+  <div class="login-lang"><select id="lang-login" class="lang-select" title="Language"></select></div>
   <div class="login-brand">
     <img src="favicon.svg" class="logo-big" alt="">
     <span class="brand-dude"><?= htmlspecialchars(cfg('APP_NAME') ?: 'NetPulse') ?></span>
-    <div class="brand-sub">monitoring siete a zariadení</div>
+    <div class="brand-sub" data-i18n="@login_sub">monitoring siete a zariadení</div>
   </div>
-  <?php if ($err): ?><div class="login-err"><?= htmlspecialchars($err) ?></div><?php endif; ?>
-  <label>Používateľské meno
-    <input name="username" required autofocus>
+  <?php if ($err): ?><div class="login-err" data-i18n="Nesprávne meno alebo heslo."><?= htmlspecialchars($err) ?></div><?php endif; ?>
+  <label><span data-i18n="Používateľské meno">Používateľské meno</span>
+    <input name="username" required autofocus autocomplete="username">
   </label>
-  <label>Heslo
-    <input type="password" name="password" required>
+  <label><span data-i18n="Heslo">Heslo</span>
+    <input type="password" name="password" required autocomplete="current-password">
   </label>
-  <button type="submit">Prihlásiť sa</button>
-  <div class="login-hint">Predvolené: <b>admin</b> / <b>admin</b> — po prihlásení zmeň v Nastaveniach.</div>
-</form>
-</body></html>
+  <label class="login-remember"><input type="checkbox" name="remember" value="1"> <span data-i18n="Zapamätať prihlásenie">Zapamätať prihlásenie</span></label>
+  <button type="submit" data-i18n="Prihlásiť sa">Prihlásiť sa</button>
+  <div class="login-hint" da

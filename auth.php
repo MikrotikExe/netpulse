@@ -2,10 +2,26 @@
 /** Session autentifikácia + role (administrator > admin > user). */
 require_once __DIR__ . '/db.php';
 
+const REMEMBER_SECONDS = 60 * 60 * 24 * 30; // „Zapamätať prihlásenie" = 30 dní
+
+function np_is_secure(): bool {
+    return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (($_SERVER['SERVER_PORT'] ?? '') == 443)
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+}
+
 if (session_status() === PHP_SESSION_NONE) {
     $sdir = __DIR__ . '/data/sessions';
     if (!is_dir($sdir)) @mkdir($sdir, 0770, true);
     if (is_dir($sdir) && is_writable($sdir)) session_save_path($sdir);
+    // ak si používateľ zvolil „zapamätať", session prežije zatvorenie prehliadača
+    $remember = (($_COOKIE['np_remember'] ?? '') === '1');
+    $life = $remember ? REMEMBER_SECONDS : 0;
+    if ($remember) { @ini_set('session.gc_maxlifetime', (string) REMEMBER_SECONDS); }
+    session_set_cookie_params([
+        'lifetime' => $life, 'path' => '/', 'domain' => '',
+        'secure' => np_is_secure(), 'httponly' => true, 'samesite' => 'Lax',
+    ]);
     session_start();
 }
 
@@ -32,21 +48,38 @@ function ensure_users_table(): void {
     }
 }
 
-function try_login(string $u, string $p): bool {
+function try_login(string $u, string $p, bool $remember = false): bool {
     ensure_users_table();
     $st = db()->prepare('SELECT id,username,pass_hash,role FROM users WHERE username=?');
     $st->execute([$u]);
     $row = $st->fetch();
     if ($row && password_verify($p, $row['pass_hash'])) {
+        session_regenerate_id(true); // proti session fixation
         $_SESSION['uid'] = $row['id'];
         $_SESSION['user'] = $row['username'];
         $_SESSION['role'] = $row['role'] ?: 'user';
+        $secure = np_is_secure();
+        if ($remember) {
+            // zapamätaj voľbu aj predĺž platnosť session cookie
+            setcookie('np_remember', '1', time() + REMEMBER_SECONDS, '/', '', $secure, true);
+            setcookie(session_name(), session_id(), time() + REMEMBER_SECONDS, '/', '', $secure, true);
+        } else {
+            setcookie('np_remember', '', time() - 3600, '/', '', $secure, true);
+        }
         return true;
     }
     return false;
 }
 
-function logout(): void { $_SESSION = []; session_destroy(); }
+function logout(): void {
+    $_SESSION = [];
+    $secure = np_is_secure();
+    setcookie('np_remember', '', time() - 3600, '/', '', $secure, true);
+    if (ini_get('session.use_cookies')) {
+        setcookie(session_name(), '', time() - 3600, '/', '', $secure, true);
+    }
+    session_destroy();
+}
 function current_user(): ?string { return $_SESSION['user'] ?? null; }
 function current_uid(): ?int { return $_SESSION['uid'] ?? null; }
 function current_role(): string { return $_SESSION['role'] ?? 'user'; }
