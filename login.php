@@ -35,6 +35,7 @@ if (current_user()) { header('Location: index.php'); exit; }
   <label class="login-remember"><input type="checkbox" name="remember" value="1"> <span data-i18n="Zapamätať prihlásenie">Zapamätať prihlásenie</span></label>
   <button type="submit" data-i18n="Prihlásiť sa">Prihlásiť sa</button>
   <div class="login-hint" data-i18n-html="@login_hint">Predvolené: <b>admin</b> / <b>admin</b></div>
+  <a class="login-credit" href="https://jurajchudy.sk" target="_blank" rel="noopener"><svg class="cic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0 -18z"/></svg>jurajchudy.sk</a>
 </form>
 <script src="assets/i18n.js?v=<?= @filemtime(__DIR__.'/assets/i18n.js') ?>"></script>
 </body></html>

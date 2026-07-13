@@ -16,6 +16,7 @@ button{font-family:inherit}
   padding:40px 30px 34px;width:340px;display:flex;flex-direction:column;gap:14px;
   box-shadow:0 24px 60px rgba(0,0,0,.5)}
 .login-brand{text-align:center;margin-bottom:6px}
+.logo-big{width:64px;height:64px}
 .brand-dude{font-size:30px;font-weight:800;letter-spacing:-1px;color:var(--text)}
 .brand-web{color:var(--accent)}
 .brand-sub{color:var(--muted);font-size:13px;margin-top:2px}
@@ -414,13 +415,12 @@ th .arr{color:var(--accent);font-size:10px;margin-left:3px}
 .lang-select:focus{border-color:var(--accent)}
 .top-right .lang-select{margin-right:2px}
 .settings-hint{color:var(--muted);font-size:13px;margin:0 0 12px}
-
-/* --- login: jazyk vpravo hore --- */
 .login-lang{position:absolute;top:14px;right:14px;margin:0;z-index:2}
+.login-card label.login-remember{flex-direction:row;align-items:center;gap:9px;font-size:13px;color:var(--muted);cursor:pointer;user-select:none;margin:2px 0}
+.login-card label.login-remember input{-webkit-appearance:checkbox;-moz-appearance:checkbox;appearance:checkbox;width:16px;height:16px;min-width:16px;padding:0;margin:0;border:0;border-radius:0;background:none;accent-color:var(--accent);cursor:pointer}
+/* --- kredit tvorcu na login --- */
 
-/* --- login: zapamätať prihlásenie (prebíja generické .login-card label/input) --- */
-.login-card label.login-remember{flex-direction:row;align-items:center;gap:9px;font-size:13px;
-  color:var(--muted);cursor:pointer;user-select:none;margin:2px 0}
-.login-card label.login-remember input{-webkit-appearance:checkbox;-moz-appearance:checkbox;appearance:checkbox;
-  width:16px;height:16px;min-width:16px;padding:0;margin:0;border:0;border-radius:0;background:none;
-  accent-color:var(--accent);cursor:pointer}
+/* --- kredit tvorcu (pill) --- */
+.login-credit{display:inline-flex;align-items:center;gap:6px;align-self:center;margin-top:6px;padding:5px 13px;border-radius:999px;background:var(--panel2);border:1px solid var(--border);color:var(--muted);font-size:12px;font-weight:500;text-decoration:none;transition:border-color .15s,color .15s,box-shadow .15s}
+.login-credit .cic{width:14px;height:14px;color:var(--accent);flex-shrink:0}
+.login-credit:hover{border-color:var(--accent);color:var(--text);box-shadow:0 0 0 3px rgba(139,124,240,.14)}
