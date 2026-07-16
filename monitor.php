@@ -63,7 +63,7 @@ $useFping = $useIcmp && cfg('USE_FPING') && fping_available();
 // vypnutý monitoring -> sivé (unknown), nepingovať
 $pdo->exec("UPDATE devices SET status='unknown', rtt=NULL, down_since=NULL
             WHERE monitored=0 AND status<>'unknown'");
-$devs = $pdo->query("SELECT id,name,ip,status,down_since FROM devices
+$devs = $pdo->query("SELECT id,name,ip,status,down_since,notified FROM devices
                      WHERE ip IS NOT NULL AND ip<>'' AND (monitored=1 OR monitored IS NULL)")->fetchAll();
 
 // služby zoskupené podľa zariadenia
@@ -78,7 +78,7 @@ if ($useFping) {
     $alive = fping_batch($ips, max(300, $pt*1000));
 }
 
-$updDev  = $pdo->prepare('UPDATE devices SET status=?,rtt=?,last_check=?,down_since=? WHERE id=?');
+$updDev  = $pdo->prepare('UPDATE devices SET status=?,rtt=?,last_check=?,down_since=?,notified=? WHERE id=?');
 $updSvc  = $pdo->prepare('UPDATE services SET status=?,last_check=? WHERE id=?');
 $hist    = $pdo->prepare('INSERT INTO status_history(device_id,ts,status,rtt) VALUES(?,?,?,?)');
 $evt     = $pdo->prepare('INSERT INTO events(ts,device_id,device_name,ip,status,message) VALUES(?,?,?,?,?,?)');
@@ -115,28 +115,38 @@ foreach ($devs as $d) {
 
     // ---- trojstavová logika ----
     $prev = $d['status']; $downSince = $d['down_since'];
+    // posledný OZNÁMENÝ stav (spätná kompatibilita, ak stĺpec ešte prázdny)
+    $notified = !empty($d['notified']) ? $d['notified'] : (($prev === 'down') ? 'down' : 'up');
     if ($reach) { $status='up'; $downSince=null; }
     else {
         if (!$downSince) $downSince = $now;
         $status = (($nowTs - strtotime($downSince)) >= $downAfter) ? 'down' : 'pending';
     }
 
-    if ($status === 'down' && $prev !== 'down') {
+    // rozhodnutie o notifikácii podľa POSLEDNE OZNÁMENÉHO stavu -> žiadne duplicity
+    $doDown = ($status === 'down' && $notified !== 'down');
+    $doUp   = ($status === 'up'   && $notified === 'down');
+    $newNotified = $doDown ? 'down' : ($doUp ? 'up' : $notified);
+
+    // NAJPRV zapíš stav (vrátane notified). Ak zápis zlyhá, notifikáciu nepošleme.
+    try {
+        $updDev->execute([$status,$rtt,$now,$downSince,$newNotified,$d['id']]);
+    } catch (Throwable $e) { continue; }
+    $hist->execute([$d['id'],$now,$status,$rtt]);
+
+    if ($doDown) {
         $evt->execute([$now,$d['id'],$d['name'],$ip,'down',"Zariadenie: {$d['name']} IP:$ip; je nefunkčné"]);
         if (!($openOut->execute([$d['id']]) && $openOut->fetch()))
             $newOut->execute([$d['id'],'ping',$downSince ?: $now]);
         tg_notify_status($d['name'], $ip, 'down', $now);
     }
-    if ($status === 'up' && $prev === 'down') {
+    if ($doUp) {
         $evt->execute([$now,$d['id'],$d['name'],$ip,'up',"Zariadenie: {$d['name']} IP:$ip; je funkčné"]);
         if ($openOut->execute([$d['id']]) && ($row = $openOut->fetch())) {
             $closeOut->execute([$now, max(0,$nowTs-strtotime($row['started'])), $row['id']]);
         }
         tg_notify_status($d['name'], $ip, 'up', $now);
     }
-
-    $updDev->execute([$status,$rtt,$now,$downSince,$d['id']]);
-    $hist->execute([$d['id'],$now,$status,$rtt]);
 }
 $m = $useFping ? 'fping+tcp' : ($useIcmp ? 'ping+tcp' : 'tcp');
 fwrite(STDERR, count($devs) . " zariadení skontrolovaných ($m) @ $now\n");

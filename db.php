@@ -9,7 +9,10 @@ function db(): PDO {
         $pdo = new PDO($dsn, $c['MYSQL_USER'], $c['MYSQL_PASS']);
     } else {
         $pdo = new PDO('sqlite:' . $c['SQLITE_PATH']);
-        $pdo->exec('PRAGMA busy_timeout=5000'); $pdo->exec('PRAGMA journal_mode=WAL'); $pdo->exec('PRAGMA synchronous=NORMAL'); $pdo->exec('PRAGMA foreign_keys=ON');
+        $pdo->exec('PRAGMA busy_timeout=5000');   // počkaj na zámok namiesto chyby "database is locked"
+        $pdo->exec('PRAGMA journal_mode=WAL');     // súbežné čítanie + zápis (web, monitor, snmp poller)
+        $pdo->exec('PRAGMA synchronous=NORMAL');
+        $pdo->exec('PRAGMA foreign_keys=ON');
     }
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
@@ -27,6 +30,7 @@ function migrate(): void {
         ['maps',    'sort_order', $mysql ? 'INT' : 'INTEGER'],
         ['devices', 'monitored',  $mysql ? 'TINYINT DEFAULT 1' : 'INTEGER DEFAULT 1'],
         ['devices', 'password',   $mysql ? 'VARCHAR(255)' : 'TEXT'],
+        ['devices', 'notified',   $mysql ? 'VARCHAR(16)' : 'TEXT'],
         ['snmp_profiles','sec_name',  $mysql ? 'VARCHAR(128)' : 'TEXT'],
         ['snmp_profiles','auth_pass', $mysql ? 'VARCHAR(128)' : 'TEXT'],
         ['snmp_profiles','priv_pass', $mysql ? 'VARCHAR(128)' : 'TEXT'],
