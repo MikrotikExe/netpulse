@@ -300,7 +300,13 @@ try {
         require_role('administrator');
         echo json_encode(['tg_enabled'=>setting_get('tg_enabled','0'),
             'tg_token'=>setting_get('tg_token',''), 'tg_chat'=>setting_get('tg_chat',''),
-            'snmp_interval'=>setting_get('snmp_interval','30'), 'map_refresh'=>setting_get('map_refresh','10')]); break;
+            'snmp_interval'=>setting_get('snmp_interval','30'), 'map_refresh'=>setting_get('map_refresh','10'),
+            'timezone'=>setting_get('timezone',''), 'timezone_eff'=>date_default_timezone_get(),
+            'timezone_sys'=>np_system_tz(), 'now'=>date('Y-m-d H:i:s T')]); break;
+
+    case 'timezones':
+        require_role('administrator');
+        echo json_encode(np_tz_list()); break;
 
     case 'save_settings':
         require_role('administrator');
@@ -309,6 +315,16 @@ try {
         if(array_key_exists('tg_chat',$in)) setting_set('tg_chat', trim($in['tg_chat'] ?? ''));
         if(array_key_exists('snmp_interval',$in)) setting_set('snmp_interval', max(3,(int)$in['snmp_interval']));
         if(array_key_exists('map_refresh',$in)) setting_set('map_refresh', max(2,(int)$in['map_refresh']));
+        if(array_key_exists('timezone',$in)) {
+            $tz = trim((string)$in['timezone']);
+            if ($tz !== '' && !np_tz_valid($tz)) {
+                echo json_encode(['error'=>'Neznáme časové pásmo']); break;
+            }
+            setting_set('timezone', $tz);          // prázdne = automaticky zo servera
+            $eff = $tz !== '' ? $tz : np_system_tz();
+            if (!np_tz_valid($eff)) $eff = 'UTC';
+            @date_default_timezone_set($eff);
+        }
         echo json_encode(['ok'=>true]); break;
 
     case 'test_telegram':

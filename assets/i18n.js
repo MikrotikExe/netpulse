@@ -14,6 +14,7 @@
 
   const DICT={
   en:{
+    "Časové pásmo":"Time zone","Automaticky zo servera":"Automatic (from server)","Čas na serveri:":"Server time:","@help_timezone":"Time zone used for all times in the app, events and Telegram messages. \"Automatic\" uses the server's system setting.",
     // header / nav
     "Prepnúť tému":"Toggle theme","Odhlásiť":"Log out","Mapy":"Maps","Zariadenia":"Devices",
     "Služby":"Services","Poruchy":"Faults","Udalosti":"Events","Grafy":"Graphs","Nastavenia":"Settings",
@@ -91,6 +92,7 @@
     "@iv_saved":"Saved. Map refresh applies now, measurement from the next poller cycle."
   },
   cs:{
+    "Časové pásmo":"Časové pásmo","Automaticky zo servera":"Automaticky ze serveru","Čas na serveri:":"Čas na serveru:","@help_timezone":"Časové pásmo pro všechny časy v aplikaci, události a Telegram zprávy. „Automaticky“ použije systémové nastavení serveru.",
     "Prepnúť tému":"Přepnout motiv","Odhlásiť":"Odhlásit","Mapy":"Mapy","Zariadenia":"Zařízení",
     "Služby":"Služby","Poruchy":"Poruchy","Udalosti":"Události","Grafy":"Grafy","Nastavenia":"Nastavení",
     "Nová mapa":"Nová mapa","Zoznam máp":"Seznam map","Uzol":"Uzel","Zariadenie":"Zařízení","Spoj":"Spoj",
@@ -163,6 +165,7 @@
     "@iv_saved":"Uloženo. Obnova mapy platí hned, měření od dalšího cyklu polleru."
   },
   de:{
+    "Časové pásmo":"Zeitzone","Automaticky zo servera":"Automatisch (vom Server)","Čas na serveri:":"Serverzeit:","@help_timezone":"Zeitzone für alle Zeitangaben in der App, Ereignisse und Telegram-Nachrichten. „Automatisch“ übernimmt die Systemeinstellung des Servers.",
     "Prepnúť tému":"Thema wechseln","Odhlásiť":"Abmelden","Mapy":"Karten","Zariadenia":"Geräte",
     "Služby":"Dienste","Poruchy":"Störungen","Udalosti":"Ereignisse","Grafy":"Diagramme","Nastavenia":"Einstellungen",
     "Nová mapa":"Neue Karte","Zoznam máp":"Kartenliste","Uzol":"Knoten","Zariadenie":"Gerät","Spoj":"Verbindung",
@@ -235,6 +238,7 @@
     "@iv_saved":"Gespeichert. Kartenaktualisierung gilt sofort, Messung ab dem nächsten Poller-Zyklus."
   },
   pl:{
+    "Časové pásmo":"Strefa czasowa","Automaticky zo servera":"Automatycznie (z serwera)","Čas na serveri:":"Czas serwera:","@help_timezone":"Strefa czasowa dla wszystkich godzin w aplikacji, zdarzeń i wiadomości Telegram. „Automatycznie” używa ustawienia systemowego serwera.",
     "Prepnúť tému":"Przełącz motyw","Odhlásiť":"Wyloguj","Mapy":"Mapy","Zariadenia":"Urządzenia",
     "Služby":"Usługi","Poruchy":"Awarie","Udalosti":"Zdarzenia","Grafy":"Wykresy","Nastavenia":"Ustawienia",
     "Nová mapa":"Nowa mapa","Zoznam máp":"Lista map","Uzol":"Węzeł","Zariadenie":"Urządzenie","Spoj":"Połączenie",
@@ -307,6 +311,7 @@
     "@iv_saved":"Zapisano. Odświeżanie mapy działa od razu, pomiar od następnego cyklu pollera."
   },
   hu:{
+    "Časové pásmo":"Időzóna","Automaticky zo servera":"Automatikus (a szerverről)","Čas na serveri:":"Szerveridő:","@help_timezone":"Az alkalmazásban megjelenő időpontok, események és Telegram-üzenetek időzónája. Az „Automatikus” a szerver rendszerbeállítását használja.",
     "Prepnúť tému":"Téma váltása","Odhlásiť":"Kijelentkezés","Mapy":"Térképek","Zariadenia":"Eszközök",
     "Služby":"Szolgáltatások","Poruchy":"Hibák","Udalosti":"Események","Grafy":"Grafikonok","Nastavenia":"Beállítások",
     "Nová mapa":"Új térkép","Zoznam máp":"Térképlista","Uzol":"Csomópont","Zariadenie":"Eszköz","Spoj":"Kapcsolat",
@@ -378,7 +383,8 @@
     "@imported":"Import a Dude-ból kész. Frissítsd az oldalt (F5).",
     "@iv_saved":"Mentve. A térkép frissítése azonnal érvényes, a mérés a következő poller ciklustól."
   },
-  sk:{ // len aliasy (kľúč '@...') – bežné SK kľúče = identita
+  sk:{
+    "@help_timezone":"Časové pásmo pre všetky časy v aplikácii, udalosti a Telegram správy. „Automaticky“ použije systémové nastavenie servera.", // len aliasy (kľúč '@...') – bežné SK kľúče = identita
     "@login_sub":"monitoring siete a zariadení",
     "@help_appearance":"Farebná téma aplikácie. „Automaticky“ sa riadi nastavením systému.",
     "@help_telegram":"Pri výpadku alebo obnove zariadenia príde správa do Telegramu (natívne, netreba wget). Token vytvoríš cez <b>@BotFather</b>, chat ID skupiny/kanála zistíš napr. cez <b>@getidsbot</b> alebo <b>@RawDataBot</b>.",

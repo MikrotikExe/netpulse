@@ -525,6 +525,35 @@ function panelAppearance(p){
       <button data-theme="dark">${UI.moon}<span>${TR('Tmavá')}</span></button></div></div>\n    <div class="settings-card"><h3>\uD83C\uDF10 ${TR('Jazyk')}</h3><select class="lang-select" id="lang-set" style="max-width:240px"></select></div>`;
   p.querySelectorAll('.theme-seg button').forEach(b=>{b.classList.toggle('active',b.dataset.theme===getTheme());b.onclick=()=>setTheme(b.dataset.theme);});
   if(window.I18N)I18N.buildSelect(document.getElementById('lang-set'));
+  if(S._srank>=3) renderTzCard(p);
+}
+async function renderTzCard(p){
+  const card=document.createElement('div');
+  card.className='settings-card';
+  card.innerHTML='<h3>\u23F0 '+TR('Časové pásmo')+'</h3>'
+    +'<p style="color:var(--muted);font-size:13px;margin:0 0 12px">'+TR('@help_timezone')+'</p>'
+    +'<select id="tz-sel" style="max-width:320px"></select>'
+    +'<div class="modal-actions" style="margin-top:12px"><button class="btn" id="tz-save">'+TR('Uložiť')+'</button></div>'
+    +'<div id="tz-msg" style="font-size:13px;margin-top:8px"></div>';
+  p.appendChild(card);
+  const msgEarly=card.querySelector('#tz-msg');
+  let st={},list=[];
+  try{ st=await api.get('get_settings'); list=await api.get('timezones'); }
+  catch(e){ msgEarly.innerHTML='<span class="st-down">'+TR('Chyba')+'</span>'; return; }
+  const sel=card.querySelector('#tz-sel');
+  const auto=document.createElement('option');
+  auto.value=''; auto.textContent=TR('Automaticky zo servera')+' ('+(st.timezone_sys||'UTC')+')';
+  sel.appendChild(auto);
+  (list||[]).forEach(z=>{ const o=document.createElement('option'); o.value=z; o.textContent=z; sel.appendChild(o); });
+  sel.value=st.timezone||'';
+  const msg=card.querySelector('#tz-msg');
+  msg.innerHTML='<span style="color:var(--muted)">'+TR('Čas na serveri:')+' '+esc(st.now||'')+'</span>';
+  card.querySelector('#tz-save').onclick=async()=>{
+    const r=await api.post('save_settings',{timezone:sel.value});
+    if(r&&r.error){ msg.innerHTML='<span class="st-down">'+esc(r.error)+'</span>'; return; }
+    const s2=await api.get('get_settings');
+    msg.innerHTML='<span class="st-up">'+TR('Uložené.')+'</span> <span style="color:var(--muted)">'+esc(s2.now||'')+'</span>';
+  };
 }
 function panelPassword(p){
   const me=S._me||{user:'',role:'user'};

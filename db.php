@@ -18,11 +18,45 @@ function db(): PDO {
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
     return $pdo;
 }
-/** Časové pásmo – aby časy v udalostiach a Telegrame sedeli s lokálnym časom. */
+/** Zisti časové pásmo servera (Debian/Ubuntu: /etc/timezone alebo symlink /etc/localtime). */
+function np_system_tz(): string {
+    $f = '/etc/timezone';
+    if (@is_readable($f)) { $t = trim((string)@file_get_contents($f)); if ($t) return $t; }
+    $l = @readlink('/etc/localtime');
+    if ($l && preg_match('~zoneinfo/(.+)$~', $l, $m)) return $m[1];
+    $ini = @ini_get('date.timezone');
+    return $ini ?: 'UTC';
+}
+
+/** Zoznam platných pásiem vrátane starších názvov (US/Eastern, Europe/Kiev…). */
+function np_tz_list(): array {
+    static $l = null;
+    if ($l === null) {
+        $l = @DateTimeZone::listIdentifiers(DateTimeZone::ALL_WITH_BC);
+        if (!$l) $l = DateTimeZone::listIdentifiers();
+    }
+    return $l;
+}
+function np_tz_valid(?string $tz): bool {
+    return $tz !== null && $tz !== '' && in_array($tz, np_tz_list(), true);
+}
+
+/** Časové pásmo aplikácie – poradie: nastavenie v UI → config.php → systém servera.
+ *  POZOR: date_default_timezone_set() pri neplatnom pásme nevyhadzuje výnimku, len E_WARNING,
+ *  ktorý by rozbil JSON odpoveď API – preto sa hodnota najprv overí. */
 function np_init_tz(): void {
-    static $done=false; if($done) return; $done=true;
-    $tz = cfg('APP_TIMEZONE') ?: 'Europe/Bratislava';
-    try { date_default_timezone_set($tz); } catch (Throwable $e) { date_default_timezone_set('UTC'); }
+    static $done=false; if($done) return;
+    $tz = null;
+    try {  // uložené v Nastaveniach (tabuľka nemusí ešte existovať)
+        $st = db()->prepare('SELECT v FROM app_settings WHERE k=?');
+        $st->execute(['timezone']);
+        $v = $st->fetchColumn(); if ($v) $tz = (string)$v;
+    } catch (Throwable $e) {}
+    if (!np_tz_valid($tz)) $tz = (string)(cfg('APP_TIMEZONE') ?: '');
+    if (!np_tz_valid($tz)) $tz = np_system_tz();
+    if (!np_tz_valid($tz)) $tz = 'UTC';
+    if (@date_default_timezone_set($tz)) $done = true;   // pri zlyhaní skúsi znova nabudúce
+    else date_default_timezone_set('UTC');
 }
 
 function cfg(string $k) { static $c=null; if(!$c)$c=require __DIR__.'/config.php'; return $c[$k]??null; }
