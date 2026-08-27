@@ -18,6 +18,13 @@ function db(): PDO {
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
     return $pdo;
 }
+/** Časové pásmo – aby časy v udalostiach a Telegrame sedeli s lokálnym časom. */
+function np_init_tz(): void {
+    static $done=false; if($done) return; $done=true;
+    $tz = cfg('APP_TIMEZONE') ?: 'Europe/Bratislava';
+    try { date_default_timezone_set($tz); } catch (Throwable $e) { date_default_timezone_set('UTC'); }
+}
+
 function cfg(string $k) { static $c=null; if(!$c)$c=require __DIR__.'/config.php'; return $c[$k]??null; }
 
 /** Idempotentné migrácie – doplní chýbajúce stĺpce v existujúcich DB. */
@@ -69,3 +76,5 @@ function setting_set(string $k, $v): void {
     $pdo=db(); $repl = cfg('DB_DRIVER')==='mysql' ? 'REPLACE INTO' : 'INSERT OR REPLACE INTO';
     $pdo->prepare("$repl app_settings(k,v) VALUES(?,?)")->execute([$k,(string)$v]);
 }
+
+np_init_tz();
