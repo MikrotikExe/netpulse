@@ -27,6 +27,8 @@ CREATE INDEX IF NOT EXISTS idx_nodes_map ON map_nodes(map_id);
 CREATE INDEX IF NOT EXISTS idx_links_map ON map_links(map_id);
 CREATE INDEX IF NOT EXISTS idx_svc_dev ON services(device_id);
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
+CREATE INDEX IF NOT EXISTS idx_sh_dev_ts ON status_history(device_id, ts);
+CREATE INDEX IF NOT EXISTS idx_sh_ts ON status_history(ts);
 CREATE TABLE IF NOT EXISTS probes(
   id INTEGER PRIMARY KEY, name TEXT, type TEXT, port INT, dns_name TEXT);
 CREATE TABLE IF NOT EXISTS outages(

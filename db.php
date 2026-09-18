@@ -134,6 +134,9 @@ function migrate(): void {
         $pdo->exec("CREATE TABLE IF NOT EXISTS link_traffic(link_id $big PRIMARY KEY, in_oct $big, out_oct $big, ts $dt, rx_bps DOUBLE, tx_bps DOUBLE, speed_bps DOUBLE)");
         $pdo->exec("CREATE TABLE IF NOT EXISTS traffic_history(id " . ($mysql?'BIGINT PRIMARY KEY AUTO_INCREMENT':'INTEGER PRIMARY KEY AUTOINCREMENT') . ", link_id $big, ts $dt, rx_bps DOUBLE, tx_bps DOUBLE)");
         try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_th ON traffic_history(link_id, ts)"); } catch (Throwable $e) {}
+        // BEZ tohto indexu robí okno zariadenia full scan celej histórie a drží zámok (=> "database is locked")
+        try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_sh_dev_ts ON status_history(device_id, ts)"); } catch (Throwable $e) {}
+        try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_sh_ts ON status_history(ts)"); } catch (Throwable $e) {}
     } catch (Throwable $e) {}
 }
 

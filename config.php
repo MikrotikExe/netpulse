@@ -9,6 +9,9 @@
 return [
     // Názov aplikácie (zobrazí sa v hlavičke, titulku a prihlásení)
     'APP_NAME'    => 'NetPulse',
+    // Časové pásmo aplikácie (časy vo výpisoch, udalostiach a Telegram správach)
+    // Časové pásmo. Prázdne = zistí sa automaticky zo servera; zmeniť sa dá aj v Nastaveniach.
+    'APP_TIMEZONE'=> getenv('DUDEWEB_TZ') ?: '',
     'DB_DRIVER'   => getenv('DUDEWEB_DRIVER') ?: 'sqlite',
     'SQLITE_PATH' => __DIR__ . '/data/app.db',
     'MYSQL_HOST'  => '127.0.0.1',
@@ -32,4 +35,10 @@ return [
     // Trojstavový monitoring (ako Dude): up=zelená, pending=žltá, down=červená
     'DOWN_AFTER'  => 30,  // po koľkých sekundách nereagovania -> červená (down)
     'USE_FPING'   => true, // rýchly paralelný ping (odporúčané, `apt install fping`)
+
+    // Retencia histórie (dá sa zmeniť aj v Nastaveniach → Meranie toku).
+    // Bez nej databáza rastie o stovky tisíc riadkov denne.
+    'HISTORY_DAYS'  => 14, // koľko dní držať históriu stavov
+    'HISTORY_EVERY' => 60, // ako často vzorkovať odozvu (s); zmena stavu sa zapíše vždy
+    'TRAFFIC_DAYS'  => 90, // koľko dní držať históriu toku (grafy Rx/Tx)
 ];

@@ -57,6 +57,9 @@ $now = date('Y-m-d H:i:s'); $nowTs = time();
 $pt = (int) cfg('PING_TIMEOUT');
 $tcpTo = (float) (cfg('TCP_TIMEOUT') ?: 1);
 $downAfter = (int) (cfg('DOWN_AFTER') ?: 30);
+// Retencia histórie. Bez nej tabuľka status_history rástla o ~500 000 riadkov denne.
+$histDays  = max(1, (int) (setting_get('history_days', (string)(cfg('HISTORY_DAYS') ?: 14))));
+$histEvery = max(0, (int) (setting_get('history_every', (string)(cfg('HISTORY_EVERY') ?: 60))));
 $fallbackPorts = cfg('TCP_FALLBACK_PORTS') ?: [8291,80,443,22,23];
 $method = cfg('CHECK_METHOD') ?: 'auto';
 $useIcmp = ($method === 'icmp') || ($method === 'auto' && exec_allowed());
@@ -65,7 +68,7 @@ $useFping = $useIcmp && cfg('USE_FPING') && fping_available();
 // vypnutý monitoring -> sivé (unknown), nepingovať
 db_retry(fn() => $pdo->exec("UPDATE devices SET status='unknown', rtt=NULL, down_since=NULL
             WHERE monitored=0 AND status<>'unknown'"));
-$devs = db_retry(fn() => $pdo->query("SELECT id,name,ip,status,down_since,notified FROM devices
+$devs = db_retry(fn() => $pdo->query("SELECT id,name,ip,status,down_since,notified,last_check FROM devices
                      WHERE ip IS NOT NULL AND ip<>'' AND (monitored=1 OR monitored IS NULL)")->fetchAll());
 if ($devs === null) { fwrite(STDERR, "Zoznam zariadení sa nepodarilo načítať (DB zamknutá) – cyklus preskočený\n"); exit(0); }
 if (!$devs)         { fwrite(STDERR, "Žiadne monitorované zariadenia\n"); exit(0); }
@@ -142,7 +145,13 @@ foreach ($devs as $d) {
     // a skúsi sa znova v ďalšom cykle – nikdy však nezhodíme celý beh.
     $written = db_retry(fn() => $updDev->execute([$status,$rtt,$now,$downSince,$newNotified,$d['id']]));
     if (!$written) { $failed++; continue; }
-    db_retry(fn() => $hist->execute([$d['id'],$now,$status,$rtt]));
+    // Zmenu stavu zapíš vždy; meranie odozvy len vzorkuj, inak história rastie donekonečna.
+    $changed = ($status !== $prev);
+    $sample = $histEvery === 0 || $changed;
+    if (!$sample && !empty($d['last_check'])) {
+        $sample = intdiv($nowTs, $histEvery) !== intdiv((int)strtotime($d['last_check']), $histEvery);
+    } elseif (!$sample) { $sample = true; }
+    if ($sample) db_retry(fn() => $hist->execute([$d['id'],$now,$status,$rtt]));
 
     if ($doDown) {
         db_retry(fn() => $evt->execute([$now,$d['id'],$d['name'],$ip,'down',"Zariadenie: {$d['name']} IP:$ip; je nefunkčné"]));
@@ -167,6 +176,31 @@ foreach ($devs as $d) {
     $failed++; error_log('NetPulse monitor ['.($d['name'] ?? '?').']: '.$e->getMessage());
   }
 }
+// ---- hodinové upratovanie histórie (drží DB malú a rýchlu) ----
+$lastPurge = (int) setting_get('last_purge_hist', '0');
+if ($nowTs - $lastPurge > 3600) {
+    setting_set('last_purge_hist', (string)$nowTs);
+    $cut = date('Y-m-d H:i:s', $nowTs - $histDays * 86400);
+    // po častiach, aby veľký DELETE nedržal zámok dlho
+    for ($i = 0; $i < 20; $i++) {
+        $n = db_retry(fn() => $pdo->exec("DELETE FROM status_history WHERE id IN
+              (SELECT id FROM status_history WHERE ts < '$cut' LIMIT 20000)"));
+        if (!$n) break;
+        usleep(200000);
+    }
+    db_retry(fn() => $pdo->exec("DELETE FROM events WHERE ts < '"
+        . date('Y-m-d H:i:s', $nowTs - 365*86400) . "'"));
+    // staré session súbory (PHP ich vo vlastnom priečinku sám nemaže)
+    $sdir = __DIR__ . '/data/sessions';
+    if (is_dir($sdir)) {
+        $cutS = $nowTs - 31*86400; $gone = 0;
+        foreach ((glob($sdir . '/sess_*') ?: []) as $sf) {
+            if (@filemtime($sf) < $cutS && @unlink($sf)) $gone++;
+            if ($gone > 20000) break;
+        }
+    }
+}
+
 // Telegram zlyhal -> vráť posledný oznámený stav, nech sa správa pošle v ďalšom cykle
 if ($tgFail) {
     $rv = $pdo->prepare('UPDATE devices SET notified=? WHERE id=?');

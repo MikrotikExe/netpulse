@@ -619,7 +619,11 @@ async function panelSnmp(p){
     <div class="form-grid">
       <label>${TR('Interval merania SNMP (s)')}<input id="iv-snmp" type="number" min="3" value="${esc(st.snmp_interval||'30')}"></label>
       <label>${TR('Obnova mapy v prehliadači (s)')}<input id="iv-map" type="number" min="2" value="${esc(st.map_refresh||'10')}"></label>
+      <label>${TR('Držať históriu (dní)')}<input id="iv-hd" type="number" min="1" value="${esc(st.history_days||'14')}"></label>
+      <label>${TR('Vzorkovať odozvu každých (s)')}<input id="iv-he" type="number" min="0" value="${esc(st.history_every||'60')}"></label>
+      <label>${TR('Držať históriu toku (dní)')}<input id="iv-td" type="number" min="1" value="${esc(st.traffic_days||'90')}"></label>
     </div>
+    <p style="color:var(--muted);font-size:12px;margin:0 0 8px">${TR('@help_history')}</p>
     <div class="modal-actions"><button class="btn" id="iv-save">${TR('Uložiť intervaly')}</button></div>
     <div id="iv-msg" style="font-size:13px;margin-top:8px"></div></div>
     <div class="settings-card"><h3>${SNMPIC} ${TR('SNMP profily')}</h3>
@@ -648,7 +652,7 @@ async function panelSnmp(p){
   const v3vis=()=>{$('sp-v3').style.display=$('sp-ver').value==='2'?'block':'none';};
   const fill=(pr)=>{$('sp-id').value=pr?pr.id:'';$('sp-name').value=pr?pr.name:'';$('sp-comm').value=pr?(pr.community||''):'public';$('sp-ver').value=pr?pr.version:'1';$('sp-port').value=pr?pr.port:'161';
     $('sp-sec').value=pr?(pr.sec_name||''):'';$('sp-auth').value=pr?(pr.auth_pass||''):'';$('sp-priv').value=pr?(pr.priv_pass||''):'';$('sp-authp').value=pr?(pr.auth_proto||'MD5'):'MD5';$('sp-privp').value=pr?(pr.priv_proto||'DES'):'DES';v3vis();};
-  $('iv-save').onclick=async()=>{await api.post('save_settings',{snmp_interval:$('iv-snmp').value,map_refresh:$('iv-map').value});$('iv-msg').innerHTML='<span class="st-up">'+TR('@iv_saved')+'</span>';startLive();};
+  $('iv-save').onclick=async()=>{await api.post('save_settings',{snmp_interval:$('iv-snmp').value,map_refresh:$('iv-map').value,history_days:$('iv-hd').value,history_every:$('iv-he').value,traffic_days:$('iv-td').value});$('iv-msg').innerHTML='<span class="st-up">'+TR('@iv_saved')+'</span>';startLive();};
   $('sp-ver').onchange=v3vis; v3vis();
   $('sp-save').onclick=async()=>{
     if(!$('sp-name').value.trim()){$('sp-msg').innerHTML='<span class="st-down">'+TR('Zadaj názov.')+'</span>';return;}

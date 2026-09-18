@@ -14,6 +14,8 @@
 
   const DICT={
   en:{
+    "Držať históriu toku (dní)":"Keep traffic history (days)",
+    "Držať históriu (dní)":"Keep history (days)","Vzorkovať odozvu každých (s)":"Sample latency every (s)","@help_history":"History older than this is deleted automatically. Latency is sampled at the given interval, but every status change is always recorded (0 = record every cycle – makes the database grow fast).",
     "Časové pásmo":"Time zone","Automaticky zo servera":"Automatic (from server)","Čas na serveri:":"Server time:","@help_timezone":"Time zone used for all times in the app, events and Telegram messages. \"Automatic\" uses the server's system setting.",
     // header / nav
     "Prepnúť tému":"Toggle theme","Odhlásiť":"Log out","Mapy":"Maps","Zariadenia":"Devices",
@@ -92,6 +94,8 @@
     "@iv_saved":"Saved. Map refresh applies now, measurement from the next poller cycle."
   },
   cs:{
+    "Držať históriu toku (dní)":"Držet historii toku (dní)",
+    "Držať históriu (dní)":"Držet historii (dní)","Vzorkovať odozvu každých (s)":"Vzorkovat odezvu každých (s)","@help_history":"Starší historie se automaticky maže. Odezva se vzorkuje v daném intervalu, každá změna stavu se ale zapíše vždy (0 = zapisovat každý cyklus – databáze rychle roste).",
     "Časové pásmo":"Časové pásmo","Automaticky zo servera":"Automaticky ze serveru","Čas na serveri:":"Čas na serveru:","@help_timezone":"Časové pásmo pro všechny časy v aplikaci, události a Telegram zprávy. „Automaticky“ použije systémové nastavení serveru.",
     "Prepnúť tému":"Přepnout motiv","Odhlásiť":"Odhlásit","Mapy":"Mapy","Zariadenia":"Zařízení",
     "Služby":"Služby","Poruchy":"Poruchy","Udalosti":"Události","Grafy":"Grafy","Nastavenia":"Nastavení",
@@ -165,6 +169,8 @@
     "@iv_saved":"Uloženo. Obnova mapy platí hned, měření od dalšího cyklu polleru."
   },
   de:{
+    "Držať históriu toku (dní)":"Traffic-Verlauf aufbewahren (Tage)",
+    "Držať históriu (dní)":"Verlauf aufbewahren (Tage)","Vzorkovať odozvu každých (s)":"Latenz erfassen alle (s)","@help_history":"Älterer Verlauf wird automatisch gelöscht. Die Latenz wird im angegebenen Intervall erfasst, jede Statusänderung wird jedoch immer gespeichert (0 = jeder Zyklus – die Datenbank wächst schnell).",
     "Časové pásmo":"Zeitzone","Automaticky zo servera":"Automatisch (vom Server)","Čas na serveri:":"Serverzeit:","@help_timezone":"Zeitzone für alle Zeitangaben in der App, Ereignisse und Telegram-Nachrichten. „Automatisch“ übernimmt die Systemeinstellung des Servers.",
     "Prepnúť tému":"Thema wechseln","Odhlásiť":"Abmelden","Mapy":"Karten","Zariadenia":"Geräte",
     "Služby":"Dienste","Poruchy":"Störungen","Udalosti":"Ereignisse","Grafy":"Diagramme","Nastavenia":"Einstellungen",
@@ -238,6 +244,8 @@
     "@iv_saved":"Gespeichert. Kartenaktualisierung gilt sofort, Messung ab dem nächsten Poller-Zyklus."
   },
   pl:{
+    "Držať históriu toku (dní)":"Przechowuj historię ruchu (dni)",
+    "Držať históriu (dní)":"Przechowuj historię (dni)","Vzorkovať odozvu každých (s)":"Próbkuj opóźnienie co (s)","@help_history":"Starsza historia jest usuwana automatycznie. Opóźnienie jest próbkowane w podanym odstępie, ale każda zmiana stanu jest zapisywana zawsze (0 = każdy cykl – baza szybko rośnie).",
     "Časové pásmo":"Strefa czasowa","Automaticky zo servera":"Automatycznie (z serwera)","Čas na serveri:":"Czas serwera:","@help_timezone":"Strefa czasowa dla wszystkich godzin w aplikacji, zdarzeń i wiadomości Telegram. „Automatycznie” używa ustawienia systemowego serwera.",
     "Prepnúť tému":"Przełącz motyw","Odhlásiť":"Wyloguj","Mapy":"Mapy","Zariadenia":"Urządzenia",
     "Služby":"Usługi","Poruchy":"Awarie","Udalosti":"Zdarzenia","Grafy":"Wykresy","Nastavenia":"Ustawienia",
@@ -311,6 +319,8 @@
     "@iv_saved":"Zapisano. Odświeżanie mapy działa od razu, pomiar od następnego cyklu pollera."
   },
   hu:{
+    "Držať históriu toku (dní)":"Forgalmi előzmények megőrzése (nap)",
+    "Držať históriu (dní)":"Előzmények megőrzése (nap)","Vzorkovať odozvu každých (s)":"Válaszidő mintavétele (s)","@help_history":"Az ennél régebbi előzmények automatikusan törlődnek. A válaszidő a megadott időközönként kerül rögzítésre, de minden állapotváltozás mindig mentésre kerül (0 = minden ciklus – az adatbázis gyorsan nő).",
     "Časové pásmo":"Időzóna","Automaticky zo servera":"Automatikus (a szerverről)","Čas na serveri:":"Szerveridő:","@help_timezone":"Az alkalmazásban megjelenő időpontok, események és Telegram-üzenetek időzónája. Az „Automatikus” a szerver rendszerbeállítását használja.",
     "Prepnúť tému":"Téma váltása","Odhlásiť":"Kijelentkezés","Mapy":"Térképek","Zariadenia":"Eszközök",
     "Služby":"Szolgáltatások","Poruchy":"Hibák","Udalosti":"Események","Grafy":"Grafikonok","Nastavenia":"Beállítások",
@@ -384,6 +394,7 @@
     "@iv_saved":"Mentve. A térkép frissítése azonnal érvényes, a mérés a következő poller ciklustól."
   },
   sk:{
+    "@help_history":"Staršia história sa automaticky maže. Odozva sa vzorkuje v zadanom intervale, každá zmena stavu sa však zapíše vždy (0 = zapisovať každý cyklus – databáza rýchlo rastie).",
     "@help_timezone":"Časové pásmo pre všetky časy v aplikácii, udalosti a Telegram správy. „Automaticky“ použije systémové nastavenie servera.", // len aliasy (kľúč '@...') – bežné SK kľúče = identita
     "@login_sub":"monitoring siete a zariadení",
     "@help_appearance":"Farebná téma aplikácie. „Automaticky“ sa riadi nastavením systému.",

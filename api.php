@@ -301,6 +301,9 @@ try {
         echo json_encode(['tg_enabled'=>setting_get('tg_enabled','0'),
             'tg_token'=>setting_get('tg_token',''), 'tg_chat'=>setting_get('tg_chat',''),
             'snmp_interval'=>setting_get('snmp_interval','30'), 'map_refresh'=>setting_get('map_refresh','10'),
+            'history_days'=>setting_get('history_days',(string)(cfg('HISTORY_DAYS') ?: 14)),
+            'history_every'=>setting_get('history_every',(string)(cfg('HISTORY_EVERY') ?: 60)),
+            'traffic_days'=>setting_get('traffic_days',(string)(cfg('TRAFFIC_DAYS') ?: 90)),
             'timezone'=>setting_get('timezone',''), 'timezone_eff'=>date_default_timezone_get(),
             'timezone_sys'=>np_system_tz(), 'now'=>date('Y-m-d H:i:s T')]); break;
 
@@ -315,6 +318,9 @@ try {
         if(array_key_exists('tg_chat',$in)) setting_set('tg_chat', trim($in['tg_chat'] ?? ''));
         if(array_key_exists('snmp_interval',$in)) setting_set('snmp_interval', max(3,(int)$in['snmp_interval']));
         if(array_key_exists('map_refresh',$in)) setting_set('map_refresh', max(2,(int)$in['map_refresh']));
+        if(array_key_exists('history_days',$in))  setting_set('history_days',  max(1,(int)$in['history_days']));
+        if(array_key_exists('history_every',$in)) setting_set('history_every', max(0,(int)$in['history_every']));
+        if(array_key_exists('traffic_days',$in))  setting_set('traffic_days',  max(1,(int)$in['traffic_days']));
         if(array_key_exists('timezone',$in)) {
             $tz = trim((string)$in['timezone']);
             if ($tz !== '' && !np_tz_valid($tz)) {

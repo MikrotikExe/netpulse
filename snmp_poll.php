@@ -72,7 +72,14 @@ foreach ($links as $l) {
 $lastPurge = (int) setting_get('last_purge', '0');
 if ($nowTs - $lastPurge > 3600) {
     setting_set('last_purge', (string)$nowTs);
-    db_retry(fn() => $pdo->exec("DELETE FROM traffic_history WHERE ts < '" . date('Y-m-d H:i:s', $nowTs - 90*86400) . "'"));
+    $tDays = max(1, (int) setting_get('traffic_days', (string)(cfg('TRAFFIC_DAYS') ?: 90)));
+    $tCut = date('Y-m-d H:i:s', $nowTs - $tDays * 86400);
+    for ($i = 0; $i < 20; $i++) {   // po dávkach, aby zámok nedržal dlho
+        $n = db_retry(fn() => $pdo->exec("DELETE FROM traffic_history WHERE rowid IN
+              (SELECT rowid FROM traffic_history WHERE ts < '$tCut' LIMIT 20000)"));
+        if (!$n) break;
+        usleep(200000);
+    }
 }
 fwrite(STDERR, "$done SNMP liniek spracovaných @ $now" . (snmp_cli()?' (snmpget)':(function_exists('snmpget')?' (php-snmp)':' (SNMP nedostupné!)')) . "\n");
 }
