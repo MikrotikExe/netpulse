@@ -21,12 +21,14 @@ function tg_send(string $token, string $chat, string $text): array {
 }
 
 /** Pošle notifikáciu o zmene stavu zariadenia (ak je Telegram zapnutý). */
-function tg_notify_status(string $name, ?string $ip, string $status, string $ts): void {
-    if (setting_get('tg_enabled','0') !== '1') return;
+function tg_notify_status(string $name, ?string $ip, string $status, string $ts): bool {
+    if (setting_get('tg_enabled','0') !== '1') return true;   // vypnuté = netreba opakovať
     $token = trim((string)setting_get('tg_token','')); $chat = trim((string)setting_get('tg_chat',''));
-    if ($token === '' || $chat === '') return;
+    if ($token === '' || $chat === '') return true;
     $sk = $status === 'up' ? 'funkčné ✅' : ($status === 'down' ? 'nefunkčné ❌' : $status);
     $icon = $status === 'up' ? '🟢' : '🔴';
     $text = "$icon Čas: $ts; Zariadenie: $name IP:" . ($ip ?: '-') . "; je: $sk";
-    @tg_send($token, $chat, $text);
+    $r = @tg_send($token, $chat, $text);
+    if (empty($r['ok'])) { error_log("NetPulse Telegram: odoslanie zlyhalo pre $name ($status)"); return false; }
+    return true;
 }

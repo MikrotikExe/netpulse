@@ -9,7 +9,7 @@
  */
 require __DIR__ . '/db.php';
 require __DIR__ . '/snmp_lib.php';
-migrate();
+try { migrate(); } catch (Throwable $e) { error_log('NetPulse snmp migrate: '.$e->getMessage()); }
 
 const OID_HC_IN  = '1.3.6.1.2.1.31.1.1.1.6';   // ifHCInOctets
 const OID_HC_OUT = '1.3.6.1.2.1.31.1.1.1.10';  // ifHCOutOctets
@@ -64,14 +64,24 @@ foreach ($links as $l) {
             }
         }
     }
-    $up->execute([$l['id'], $in, $out, $now, $rx, $tx, $speed]);
-    if ($rx !== null || $tx !== null) $hist->execute([$l['id'], $now, $rx, $tx]);
+    db_retry(fn() => $up->execute([$l['id'], $in, $out, $now, $rx, $tx, $speed]));
+    if ($rx !== null || $tx !== null) db_retry(fn() => $hist->execute([$l['id'], $now, $rx, $tx]));
     $done++;
 }
-@$pdo->query("DELETE FROM traffic_history WHERE ts < '" . date('Y-m-d H:i:s', $nowTs - 90*86400) . "'");
+// veľký DELETE drží zápisový zámok a blokuje monitor – stačí raz za hodinu
+$lastPurge = (int) setting_get('last_purge', '0');
+if ($nowTs - $lastPurge > 3600) {
+    setting_set('last_purge', (string)$nowTs);
+    db_retry(fn() => $pdo->exec("DELETE FROM traffic_history WHERE ts < '" . date('Y-m-d H:i:s', $nowTs - 90*86400) . "'"));
+}
 fwrite(STDERR, "$done SNMP liniek spracovaných @ $now" . (snmp_cli()?' (snmpget)':(function_exists('snmpget')?' (php-snmp)':' (SNMP nedostupné!)')) . "\n");
 }
 
 if (($argv[1] ?? '') === 'loop') {
-    while (true) { poll_once(); $iv = (int) setting_get('snmp_interval', 30); if ($iv < 3) $iv = 3; sleep($iv); }
-} else { poll_once(); }
+    while (true) {
+        try { poll_once(); } catch (Throwable $e) { error_log('NetPulse snmp: '.$e->getMessage()); }
+        $iv = (int) setting_get('snmp_interval', 30); if ($iv < 3) $iv = 3; sleep($iv);
+    }
+} else {
+    try { poll_once(); } catch (Throwable $e) { error_log('NetPulse snmp: '.$e->getMessage()); }
+}

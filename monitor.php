@@ -9,7 +9,7 @@
  */
 require __DIR__ . '/db.php';
 require __DIR__ . '/telegram.php';
-migrate();
+try { migrate(); } catch (Throwable $e) { error_log('NetPulse migrate: '.$e->getMessage()); }
 
 function exec_allowed(): bool {
     if (!function_exists('exec')) return false;
@@ -50,7 +50,9 @@ function snmp_check(string $ip, int $port): bool {
     return false;
 }
 
-$pdo = db();
+try { $pdo = db(); } catch (Throwable $e) {
+    fwrite(STDERR, "DB nedostupná – cyklus preskočený: ".$e->getMessage()."\n"); exit(0);
+}
 $now = date('Y-m-d H:i:s'); $nowTs = time();
 $pt = (int) cfg('PING_TIMEOUT');
 $tcpTo = (float) (cfg('TCP_TIMEOUT') ?: 1);
@@ -61,13 +63,15 @@ $useIcmp = ($method === 'icmp') || ($method === 'auto' && exec_allowed());
 $useFping = $useIcmp && cfg('USE_FPING') && fping_available();
 
 // vypnutý monitoring -> sivé (unknown), nepingovať
-$pdo->exec("UPDATE devices SET status='unknown', rtt=NULL, down_since=NULL
-            WHERE monitored=0 AND status<>'unknown'");
-$devs = $pdo->query("SELECT id,name,ip,status,down_since,notified FROM devices
-                     WHERE ip IS NOT NULL AND ip<>'' AND (monitored=1 OR monitored IS NULL)")->fetchAll();
+db_retry(fn() => $pdo->exec("UPDATE devices SET status='unknown', rtt=NULL, down_since=NULL
+            WHERE monitored=0 AND status<>'unknown'"));
+$devs = db_retry(fn() => $pdo->query("SELECT id,name,ip,status,down_since,notified FROM devices
+                     WHERE ip IS NOT NULL AND ip<>'' AND (monitored=1 OR monitored IS NULL)")->fetchAll());
+if ($devs === null) { fwrite(STDERR, "Zoznam zariadení sa nepodarilo načítať (DB zamknutá) – cyklus preskočený\n"); exit(0); }
+if (!$devs)         { fwrite(STDERR, "Žiadne monitorované zariadenia\n"); exit(0); }
 
 // služby zoskupené podľa zariadenia
-$svcRows = $pdo->query("SELECT id,device_id,ptype,port FROM services WHERE enabled=1 OR enabled IS NULL")->fetchAll();
+$svcRows = db_retry(fn() => $pdo->query("SELECT id,device_id,ptype,port FROM services WHERE enabled=1 OR enabled IS NULL")->fetchAll()) ?: [];
 $svcByDev = [];
 foreach ($svcRows as $r) $svcByDev[$r['device_id']][] = $r;
 
@@ -78,6 +82,7 @@ if ($useFping) {
     $alive = fping_batch($ips, max(300, $pt*1000));
 }
 
+try {
 $updDev  = $pdo->prepare('UPDATE devices SET status=?,rtt=?,last_check=?,down_since=?,notified=? WHERE id=?');
 $updSvc  = $pdo->prepare('UPDATE services SET status=?,last_check=? WHERE id=?');
 $hist    = $pdo->prepare('INSERT INTO status_history(device_id,ts,status,rtt) VALUES(?,?,?,?)');
@@ -85,8 +90,13 @@ $evt     = $pdo->prepare('INSERT INTO events(ts,device_id,device_name,ip,status,
 $openOut = $pdo->prepare("SELECT id,started FROM outages WHERE device_id=? AND ended IS NULL ORDER BY id DESC LIMIT 1");
 $newOut  = $pdo->prepare('INSERT INTO outages(device_id,service,started) VALUES(?,?,?)');
 $closeOut= $pdo->prepare('UPDATE outages SET ended=?,duration=? WHERE id=?');
+} catch (Throwable $e) {
+    fwrite(STDERR, "Príprava dotazov zlyhala – cyklus preskočený: ".$e->getMessage()."\n"); exit(0);
+}
 
+$failed = 0; $tgFail = [];
 foreach ($devs as $d) {
+  try {
     $ip = $d['ip'];
     // 1) ICMP
     if ($useFping)    { $pingUp = array_key_exists($ip, $alive); $rtt = $pingUp ? $alive[$ip] : null; }
@@ -104,7 +114,7 @@ foreach ($devs as $d) {
             case 'snmp': $su = snmp_check($ip, (int)$sv['port'] ?: 161); if ($su) $reach = true; break;
             case 'icmp': default: $su = $pingUp;
         }
-        $updSvc->execute([$su ? 'up' : 'down', $now, $sv['id']]);
+        db_retry(fn() => $updSvc->execute([$su ? 'up' : 'down', $now, $sv['id']]));
     }
 
     // 3) posledná záchrana – fallback porty (winbox/web) ak nič neodpovedalo
@@ -128,25 +138,44 @@ foreach ($devs as $d) {
     $doUp   = ($status === 'up'   && $notified === 'down');
     $newNotified = $doDown ? 'down' : ($doUp ? 'up' : $notified);
 
-    // NAJPRV zapíš stav (vrátane notified). Ak zápis zlyhá, notifikáciu nepošleme.
-    try {
-        $updDev->execute([$status,$rtt,$now,$downSince,$newNotified,$d['id']]);
-    } catch (Throwable $e) { continue; }
-    $hist->execute([$d['id'],$now,$status,$rtt]);
+    // NAJPRV zapíš stav (vrátane notified). Ak sa zápis nepodaril, notifikáciu nepošleme
+    // a skúsi sa znova v ďalšom cykle – nikdy však nezhodíme celý beh.
+    $written = db_retry(fn() => $updDev->execute([$status,$rtt,$now,$downSince,$newNotified,$d['id']]));
+    if (!$written) { $failed++; continue; }
+    db_retry(fn() => $hist->execute([$d['id'],$now,$status,$rtt]));
 
     if ($doDown) {
-        $evt->execute([$now,$d['id'],$d['name'],$ip,'down',"Zariadenie: {$d['name']} IP:$ip; je nefunkčné"]);
-        if (!($openOut->execute([$d['id']]) && $openOut->fetch()))
-            $newOut->execute([$d['id'],'ping',$downSince ?: $now]);
-        tg_notify_status($d['name'], $ip, 'down', $now);
+        db_retry(fn() => $evt->execute([$now,$d['id'],$d['name'],$ip,'down',"Zariadenie: {$d['name']} IP:$ip; je nefunkčné"]));
+        db_retry(function() use ($openOut,$newOut,$d,$downSince,$now) {
+            if (!($openOut->execute([$d['id']]) && $openOut->fetch()))
+                $newOut->execute([$d['id'],'ping',$downSince ?: $now]);
+            return true;
+        });
+        if (!tg_notify_status($d['name'], $ip, 'down', $now)) $tgFail[] = [$d['id'], $notified];
     }
     if ($doUp) {
-        $evt->execute([$now,$d['id'],$d['name'],$ip,'up',"Zariadenie: {$d['name']} IP:$ip; je funkčné"]);
-        if ($openOut->execute([$d['id']]) && ($row = $openOut->fetch())) {
-            $closeOut->execute([$now, max(0,$nowTs-strtotime($row['started'])), $row['id']]);
-        }
-        tg_notify_status($d['name'], $ip, 'up', $now);
+        db_retry(fn() => $evt->execute([$now,$d['id'],$d['name'],$ip,'up',"Zariadenie: {$d['name']} IP:$ip; je funkčné"]));
+        db_retry(function() use ($openOut,$closeOut,$d,$now,$nowTs) {
+            if ($openOut->execute([$d['id']]) && ($row = $openOut->fetch()))
+                $closeOut->execute([$now, max(0,$nowTs-strtotime($row['started'])), $row['id']]);
+            return true;
+        });
+        if (!tg_notify_status($d['name'], $ip, 'up', $now)) $tgFail[] = [$d['id'], $notified];
     }
+  } catch (Throwable $e) {
+    // chyba jedného zariadenia nesmie zhodiť celý cyklus
+    $failed++; error_log('NetPulse monitor ['.($d['name'] ?? '?').']: '.$e->getMessage());
+  }
 }
+// Telegram zlyhal -> vráť posledný oznámený stav, nech sa správa pošle v ďalšom cykle
+if ($tgFail) {
+    $rv = $pdo->prepare('UPDATE devices SET notified=? WHERE id=?');
+    foreach ($tgFail as [$did, $prevNotified]) db_retry(fn() => $rv->execute([$prevNotified, $did]));
+}
+
 $m = $useFping ? 'fping+tcp' : ($useIcmp ? 'ping+tcp' : 'tcp');
-fwrite(STDERR, count($devs) . " zariadení skontrolovaných ($m) @ $now\n");
+$jm = db_journal_mode();
+$warn = ($jm !== 'wal' && cfg('DB_DRIVER') !== 'mysql') ? "  !! journal_mode=$jm (nie WAL – hrozia zámky)" : '';
+fwrite(STDERR, count($devs) . " zariadení skontrolovaných ($m) @ $now"
+    . ($failed ? "  [$failed preskočených]" : '')
+    . ($tgFail ? "  [Telegram zlyhal ".count($tgFail)."x – skúsi znova]" : '') . $warn . "\n");

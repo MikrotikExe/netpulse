@@ -6,16 +6,21 @@ function db(): PDO {
     $c = require __DIR__ . '/config.php';
     if ($c['DB_DRIVER'] === 'mysql') {
         $dsn = "mysql:host={$c['MYSQL_HOST']};port={$c['MYSQL_PORT']};dbname={$c['MYSQL_DB']};charset=utf8mb4";
-        $pdo = new PDO($dsn, $c['MYSQL_USER'], $c['MYSQL_PASS']);
+        $h = new PDO($dsn, $c['MYSQL_USER'], $c['MYSQL_PASS']);
+        $h->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     } else {
-        $pdo = new PDO('sqlite:' . $c['SQLITE_PATH']);
-        $pdo->exec('PRAGMA busy_timeout=5000');   // počkaj na zámok namiesto chyby "database is locked"
-        $pdo->exec('PRAGMA journal_mode=WAL');     // súbežné čítanie + zápis (web, monitor, snmp poller)
-        $pdo->exec('PRAGMA synchronous=NORMAL');
-        $pdo->exec('PRAGMA foreign_keys=ON');
+        $h = new PDO('sqlite:' . $c['SQLITE_PATH']);
+        $h->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        // Zlyhanie PRAGMA nesmie nechať polokonfigurované spojenie – preto každá zvlášť.
+        //   busy_timeout : počkaj na zámok namiesto chyby "database is locked"
+        //   WAL          : súbežné čítanie + zápis (web, monitor, snmp poller)
+        foreach (['PRAGMA busy_timeout=8000', 'PRAGMA journal_mode=WAL',
+                  'PRAGMA synchronous=NORMAL', 'PRAGMA foreign_keys=ON'] as $pr) {
+            try { $h->exec($pr); } catch (Throwable $e) { error_log("NetPulse: $pr zlyhalo – ".$e->getMessage()); }
+        }
     }
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+    $h->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+    $pdo = $h;   // až teraz, keď je spojenie plne nastavené
     return $pdo;
 }
 /** Zisti časové pásmo servera (Debian/Ubuntu: /etc/timezone alebo symlink /etc/localtime). */
@@ -60,6 +65,38 @@ function np_init_tz(): void {
 }
 
 function cfg(string $k) { static $c=null; if(!$c)$c=require __DIR__.'/config.php'; return $c[$k]??null; }
+
+
+/** Je chyba spôsobená zamknutou databázou? */
+function db_is_locked(Throwable $e): bool {
+    if ($e instanceof PDOException && isset($e->errorInfo[1]) && in_array((int)$e->errorInfo[1], [5, 6], true)) return true;
+    $m = $e->getMessage();
+    return stripos($m, 'database is locked') !== false || stripos($m, 'database is busy') !== false;
+}
+
+/** Zopakuj zápis, ak je DB práve zamknutá (web + monitor + snmp poller píšu súbežne).
+ *  Vráti výsledok callbacku, alebo null ak sa to ani po $tries pokusoch nepodarilo. */
+function db_retry(callable $fn, int $tries = 6) {
+    $wait = 120000; // 0,12 s, zakaždým dvojnásobok
+    for ($i = 1; $i <= $tries; $i++) {
+        try { return $fn(); }
+        catch (Throwable $e) {
+            if (!db_is_locked($e) || $i === $tries) {
+                if (db_is_locked($e)) error_log("NetPulse: DB zamknutá aj po $tries pokusoch – zápis preskočený");
+                if (!db_is_locked($e)) throw $e;
+                return null;
+            }
+            usleep($wait); $wait = min($wait * 2, 3000000);
+        }
+    }
+    return null;
+}
+
+/** Overí, či je WAL naozaj zapnutý (bez neho sa čítanie a zápis blokujú navzájom). */
+function db_journal_mode(): string {
+    try { return (string) db()->query('PRAGMA journal_mode')->fetchColumn(); }
+    catch (Throwable $e) { return '?'; }
+}
 
 /** Idempotentné migrácie – doplní chýbajúce stĺpce v existujúcich DB. */
 function migrate(): void {
