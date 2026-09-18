@@ -85,6 +85,7 @@ foreach ([
   "CREATE INDEX IF NOT EXISTS idx_sh_dev_ts ON status_history(device_id, ts)",
   "CREATE INDEX IF NOT EXISTS idx_sh_ts ON status_history(ts)",
   "CREATE INDEX IF NOT EXISTS idx_th ON traffic_history(link_id, ts)",
+  "CREATE INDEX IF NOT EXISTS idx_tr_ts ON traffic_history(ts)",
   "CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts)",
 ] as $sql) {
     try { $pdo->exec($sql); echo "  OK  " . substr($sql, 27, 40) . "\n"; }

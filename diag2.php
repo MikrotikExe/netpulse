@@ -31,17 +31,17 @@ foreach ($rows as $r) {
 if ($maxLag > 120) echo "\n  \033[31mNajväčšie oneskorenie: {$maxLag}s\033[0m – monitor v tom čase nebežal alebo bol zaseknutý.\n";
 
 echo "\n\033[1m== Medzery v behu monitoringu (podľa status_history) ==\033[0m\n";
-echo "  Ak monitor stál, medzi dvoma kontrolami bude veľká diera.\n\n";
+echo "  Odozva sa vzorkuje raz za minútu, takže medzery do ~150 s sú normálne.\n\n";
 $h = $pdo->query("SELECT DISTINCT ts FROM status_history WHERE ts LIKE '" . $day . "%' ORDER BY ts");
 $prev = null; $gaps = 0;
 foreach ($h as $r) {
     if ($prev) {
         $g = strtotime($r['ts']) - strtotime($prev);
-        if ($g > 90) { printf("  \033[31mDIERA %6d s\033[0m  %s  ->  %s\n", $g, $prev, $r['ts']); $gaps++; }
+        if ($g > 150) { printf("  \033[31mDIERA %6d s\033[0m  %s  ->  %s\n", $g, $prev, $r['ts']); $gaps++; }
     }
     $prev = $r['ts'];
 }
-if (!$gaps) echo "  Žiadne diery > 90 s – monitor bežal nepretržite.\n";
+if (!$gaps) echo "  Žiadne diery – monitor bežal nepretržite.\n";
 else echo "\n  Našlo sa $gaps dier – monitor v tom čase NEBEŽAL. Pozri: journalctl -u dudeweb-monitor --since '$day 00:00'\n";
 
 echo "\n\033[1m== Zariadenia, ktoré monitor preskakuje ==\033[0m\n";

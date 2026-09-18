@@ -29,6 +29,7 @@ CREATE INDEX IF NOT EXISTS idx_svc_dev ON services(device_id);
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
 CREATE INDEX IF NOT EXISTS idx_sh_dev_ts ON status_history(device_id, ts);
 CREATE INDEX IF NOT EXISTS idx_sh_ts ON status_history(ts);
+CREATE INDEX IF NOT EXISTS idx_tr_ts ON traffic_history(ts);
 CREATE TABLE IF NOT EXISTS probes(
   id INTEGER PRIMARY KEY, name TEXT, type TEXT, port INT, dns_name TEXT);
 CREATE TABLE IF NOT EXISTS outages(

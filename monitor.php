@@ -182,11 +182,12 @@ if ($nowTs - $lastPurge > 3600) {
     setting_set('last_purge_hist', (string)$nowTs);
     $cut = date('Y-m-d H:i:s', $nowTs - $histDays * 86400);
     // po častiach, aby veľký DELETE nedržal zámok dlho
-    for ($i = 0; $i < 20; $i++) {
+    $deadline = microtime(true) + 5.0;   // strop, nech upratovanie nezdrží kontrolu siete
+    while (microtime(true) < $deadline) {
         $n = db_retry(fn() => $pdo->exec("DELETE FROM status_history WHERE id IN
-              (SELECT id FROM status_history WHERE ts < '$cut' LIMIT 20000)"));
+              (SELECT id FROM status_history WHERE ts < '$cut' LIMIT 2000)"));
         if (!$n) break;
-        usleep(200000);
+        usleep(300000);
     }
     db_retry(fn() => $pdo->exec("DELETE FROM events WHERE ts < '"
         . date('Y-m-d H:i:s', $nowTs - 365*86400) . "'"));

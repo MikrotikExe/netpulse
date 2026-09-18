@@ -74,11 +74,13 @@ if ($nowTs - $lastPurge > 3600) {
     setting_set('last_purge', (string)$nowTs);
     $tDays = max(1, (int) setting_get('traffic_days', (string)(cfg('TRAFFIC_DAYS') ?: 90)));
     $tCut = date('Y-m-d H:i:s', $nowTs - $tDays * 86400);
-    for ($i = 0; $i < 20; $i++) {   // po dávkach, aby zámok nedržal dlho
+    // Po malých dávkach a s časovým stropom – mazanie nesmie blokovať monitor.
+    $deadline = microtime(true) + 5.0;
+    while (microtime(true) < $deadline) {
         $n = db_retry(fn() => $pdo->exec("DELETE FROM traffic_history WHERE rowid IN
-              (SELECT rowid FROM traffic_history WHERE ts < '$tCut' LIMIT 20000)"));
+              (SELECT rowid FROM traffic_history WHERE ts < '$tCut' LIMIT 2000)"));
         if (!$n) break;
-        usleep(200000);
+        usleep(300000);   // pusti k slovu monitor
     }
 }
 fwrite(STDERR, "$done SNMP liniek spracovaných @ $now" . (snmp_cli()?' (snmpget)':(function_exists('snmpget')?' (php-snmp)':' (SNMP nedostupné!)')) . "\n");

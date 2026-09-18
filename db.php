@@ -137,6 +137,8 @@ function migrate(): void {
         // BEZ tohto indexu robí okno zariadenia full scan celej histórie a drží zámok (=> "database is locked")
         try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_sh_dev_ts ON status_history(device_id, ts)"); } catch (Throwable $e) {}
         try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_sh_ts ON status_history(ts)"); } catch (Throwable $e) {}
+        // mazanie podľa času potrebuje index na samotnom ts, inak DELETE skenuje celú tabuľku a drží zámok
+        try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_tr_ts ON traffic_history(ts)"); } catch (Throwable $e) {}
     } catch (Throwable $e) {}
 }
 
