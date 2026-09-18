@@ -41,6 +41,9 @@ It can **import an existing `The Dude` database** (`dude.db`) so you don't have 
 - **Editing from the web** — add/edit/delete devices, links (line type via dialog) and maps directly in the browser.
 - **Backup / restore** and re-import from the Settings screen.
 - **Multi-language** — UI available in English, Slovak, Czech, German, Polish and Hungarian; pick your language on the login screen or later in Settings -> Appearance (saved in your browser).
+- **Automatic time zone** — detected from the server on first run, overridable in Settings -> Appearance. Event times and Telegram messages always match your local clock.
+- **Self-maintaining database** — status and traffic history are sampled and pruned automatically, so the database stays small and fast no matter how long NetPulse runs.
+- **Crash-resistant workers** — writes that hit a busy database are retried instead of killing the monitoring cycle, and a failed Telegram send is re-sent on the next pass rather than lost.
 - **Modern UI** — light / dark / auto themes, responsive layout with touch controls, sortable tables with sticky headers, clean SVG device icons.
 
 ## Requirements
@@ -174,8 +177,50 @@ Configuration lives in `config.php` — DB driver, MySQL credentials (if used), 
 | `TCP_FALLBACK_PORTS` | Ports probed for TCP availability (Winbox 8291, 80, 443, 22, ...) |
 | `DOWN_AFTER` | Seconds of no response before a device is marked down |
 | `USE_FPING` | Use `fping` for fast parallel ICMP |
+| `APP_TIMEZONE` | Time zone; empty = detect from the server automatically |
+| `HISTORY_DAYS` | How many days of status history to keep (default 14) |
+| `HISTORY_EVERY` | Latency sampling interval in seconds (default 60); status changes are always recorded |
+| `TRAFFIC_DAYS` | How many days of per-link traffic history to keep (default 90) |
 
-Telegram, SNMP profiles and poll interval are configured in the **Settings** screen and stored in the database.
+The values in `config.php` are starting defaults. Time zone, history retention, Telegram, SNMP profiles and poll intervals can all be changed at runtime in the **Settings** screen, which stores them in the database and takes precedence over `config.php`.
+
+## Maintenance
+
+NetPulse prunes its own history every hour, so under normal operation there is nothing to do. Two things are worth knowing.
+
+**Why pruning matters.** Every monitoring cycle writes one row per device. On a 150-device network checked every 25 seconds that is roughly half a million rows a day, so without retention the database grows into gigabytes and queries slow down until writes start timing out. Defaults keep 14 days of status history (sampled once a minute) and 90 days of traffic history; tune them in Settings -> Traffic measurement.
+
+**One-time cleanup.** If you are upgrading from an older version whose database has already grown, run the bundled maintenance script. It deletes expired history, creates any missing indexes, removes stale session files and compacts the file with `VACUUM`:
+
+```bash
+# dry run - shows row counts and what would be deleted, changes nothing
+php cleanup.php
+
+# for real: keep 14 days of status history and 30 days of traffic history
+sudo systemctl stop netpulse-monitor netpulse-snmp
+php cleanup.php --run 14 --tok 30
+sudo systemctl start netpulse-monitor netpulse-snmp
+```
+
+Run it as the same user the web server uses (typically `www-data`), and **always stop the workers first** — `VACUUM` cannot shrink the file while another process holds the database open, and it will take far longer.
+
+## Troubleshooting
+
+Two diagnostic scripts ship with the project. Neither modifies anything.
+
+```bash
+php diag.php                    # environment, fping, device counts, Telegram config, recent events
+php diag.php "Device name"      # plus the status history of one device
+php diag2.php 2026-09-19        # outage detection lag and gaps in monitoring for a given day
+```
+
+**Alerts arrive late, or not at all.** Run `php diag2.php <date>`. The *lag* column is the delay between a device going silent and the outage being declared; roughly `DOWN_AFTER` plus one cycle is normal. Large *gaps* mean the monitor was not running at all — check `journalctl -u netpulse-monitor` for that window.
+
+**No alert for a short outage.** Outages shorter than `DOWN_AFTER` never turn red and never notify, by design. Lower it in `config.php` if you want to catch brief drops, at the cost of more messages from flapping devices.
+
+**`database is locked` in the logs.** Make sure `journal_mode` is `wal` (`php diag.php` prints it) and that the indexes exist — run `php cleanup.php --run`. An occasional *"DB locked after 6 attempts, write skipped"* line is harmless: that cycle is skipped and the next one recovers.
+
+**Monitoring cycle is slow.** Time it with `time php monitor.php`. Install `fping` if it is missing — without it devices are pinged one at a time. Each unreachable device also costs one second per port in `TCP_FALLBACK_PORTS`, so trimming that list speeds up large outages.
 
 ## Languages
 
@@ -192,11 +237,14 @@ assets/style.css   Themes (light/dark/auto), responsive layout
 DudeParser.php     Reverse-engineered parser for The Dude's binary object blobs
 importer.php       Shared import logic (dude.db -> app schema)
 import_dude.php    CLI import entry point
-monitor.php        Availability monitoring (loop worker)
+monitor.php        Availability monitoring (one pass per run)
 snmp_lib.php       SNMP get/walk helpers (v1/v2c/v3)
 snmp_poll.php      SNMP traffic poller (loop worker)
 telegram.php       Native Telegram sender
-db.php / config.php  PDO layer & configuration
+db.php / config.php  PDO layer, retry-on-busy helpers & configuration
+cleanup.php        Maintenance: prune history, add indexes, VACUUM
+diag.php           Diagnostics: environment, monitoring and Telegram health
+diag2.php          Diagnostics: detection lag and gaps in monitoring
 schema_*.sql       SQLite / MySQL schema
 ```
 
