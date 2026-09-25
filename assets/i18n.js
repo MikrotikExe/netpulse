@@ -14,6 +14,10 @@
 
   const DICT={
   en:{
+    "Otestovať teraz":"Test now","Testujem ping a služby…":"Testing ping and services…","odpovedá":"responds","neodpovedá":"no response","vypnutá":"disabled","Kontroluje":"Checks","@svc_down_hint":"The device is alive, but a service does not respond. If you no longer use that service (e.g. The Dude on port 2210), delete it in the Services tab.",
+    "Zmazať zariadenie":"Delete device","@del_device_hint":"It will be removed from all maps and from monitoring, including its services and history.",
+    "@del_node_hint":"If the device is only on this map, it is also removed from monitoring.",
+    "Monitoring zapnutý.":"Monitoring enabled.","Monitoring vypnutý.":"Monitoring disabled.","Príliš veľa neúspešných pokusov. Skús to znova o 15 minút.":"Too many failed attempts. Try again in 15 minutes.","@default_pw_warn":"You are still using the default password. Change it in Settings → Password.",
     "Držať históriu toku (dní)":"Keep traffic history (days)",
     "Držať históriu (dní)":"Keep history (days)","Vzorkovať odozvu každých (s)":"Sample latency every (s)","@help_history":"History older than this is deleted automatically. Latency is sampled at the given interval, but every status change is always recorded (0 = record every cycle – makes the database grow fast).",
     "Časové pásmo":"Time zone","Automaticky zo servera":"Automatic (from server)","Čas na serveri:":"Server time:","@help_timezone":"Time zone used for all times in the app, events and Telegram messages. \"Automatic\" uses the server's system setting.",
@@ -80,7 +84,7 @@
     "@login_sub":"network & device monitoring",
     "@help_appearance":"Application color theme. \"Automatic\" follows your system setting.",
     "@help_telegram":"When a device goes down or recovers, a message is sent to Telegram (native, no wget needed). Create a token via <b>@BotFather</b>; get the group/channel chat ID e.g. via <b>@getidsbot</b> or <b>@RawDataBot</b>.",
-    "@tg_incomplete":"Token is incomplete — it must contain a colon, e.g. <b>1783615761:AAF…</b> (the full token from @BotFather).",
+    "@tg_incomplete":"Token is incomplete — it must contain a colon, e.g. <b>123456789:AAF…</b> (the full token from @BotFather).",
     "@tg_ok":"✅ Test sent — check Telegram.",
     "@tg_err_token":"Wrong <b>token</b> — make sure you pasted the whole token including the part after the colon.",
     "@tg_err_chat":"Wrong <b>Chat ID</b> — for a group/channel it's usually negative (e.g. -1001234567890). The bot must be a member of the group.",
@@ -94,6 +98,10 @@
     "@iv_saved":"Saved. Map refresh applies now, measurement from the next poller cycle."
   },
   cs:{
+    "Otestovať teraz":"Otestovat nyní","Testujem ping a služby…":"Testuji ping a služby…","odpovedá":"odpovídá","neodpovedá":"neodpovídá","vypnutá":"vypnutá","Kontroluje":"Kontroluje","@svc_down_hint":"Zařízení žije, ale služba neodpovídá. Pokud ji už nepoužíváš (např. The Dude na portu 2210), smaž ji v záložce Služby.",
+    "Zmazať zariadenie":"Smazat zařízení","@del_device_hint":"Odstraní se ze všech map i z monitoringu, včetně služeb a historie.",
+    "@del_node_hint":"Pokud je zařízení jen na této mapě, odstraní se i z monitoringu.",
+    "Monitoring zapnutý.":"Monitoring zapnut.","Monitoring vypnutý.":"Monitoring vypnut.","Príliš veľa neúspešných pokusov. Skús to znova o 15 minút.":"Příliš mnoho neúspěšných pokusů. Zkus to znovu za 15 minut.","@default_pw_warn":"Stále používáš výchozí heslo. Změň ho v Nastavení → Heslo.",
     "Držať históriu toku (dní)":"Držet historii toku (dní)",
     "Držať históriu (dní)":"Držet historii (dní)","Vzorkovať odozvu každých (s)":"Vzorkovat odezvu každých (s)","@help_history":"Starší historie se automaticky maže. Odezva se vzorkuje v daném intervalu, každá změna stavu se ale zapíše vždy (0 = zapisovat každý cyklus – databáze rychle roste).",
     "Časové pásmo":"Časové pásmo","Automaticky zo servera":"Automaticky ze serveru","Čas na serveri:":"Čas na serveru:","@help_timezone":"Časové pásmo pro všechny časy v aplikaci, události a Telegram zprávy. „Automaticky“ použije systémové nastavení serveru.",
@@ -155,7 +163,7 @@
     "@login_sub":"monitoring sítě a zařízení",
     "@help_appearance":"Barevné téma aplikace. „Automaticky“ se řídí nastavením systému.",
     "@help_telegram":"Při výpadku nebo obnově zařízení přijde zpráva do Telegramu (nativně, není třeba wget). Token vytvoříš přes <b>@BotFather</b>, chat ID skupiny/kanálu zjistíš např. přes <b>@getidsbot</b> nebo <b>@RawDataBot</b>.",
-    "@tg_incomplete":"Token je neúplný — musí obsahovat dvojtečku, např. <b>1783615761:AAF…</b> (celý token od @BotFather).",
+    "@tg_incomplete":"Token je neúplný — musí obsahovat dvojtečku, např. <b>123456789:AAF…</b> (celý token od @BotFather).",
     "@tg_ok":"✅ Test odeslán — zkontroluj Telegram.",
     "@tg_err_token":"Nesprávný <b>token</b> — zkontroluj, že jsi vložil celý token včetně části za dvojtečkou.",
     "@tg_err_chat":"Nesprávné <b>Chat ID</b> — pro skupinu/kanál bývá záporné (např. -1001234567890). Bot musí být členem skupiny.",
@@ -169,6 +177,10 @@
     "@iv_saved":"Uloženo. Obnova mapy platí hned, měření od dalšího cyklu polleru."
   },
   de:{
+    "Otestovať teraz":"Jetzt testen","Testujem ping a služby…":"Teste Ping und Dienste…","odpovedá":"antwortet","neodpovedá":"keine Antwort","vypnutá":"deaktiviert","Kontroluje":"Prüft","@svc_down_hint":"Das Gerät ist erreichbar, aber ein Dienst antwortet nicht. Wird er nicht mehr genutzt (z. B. The Dude auf Port 2210), lösche ihn im Reiter Dienste.",
+    "Zmazať zariadenie":"Gerät löschen","@del_device_hint":"Es wird von allen Karten und aus der Überwachung entfernt, samt Diensten und Verlauf.",
+    "@del_node_hint":"Ist das Gerät nur auf dieser Karte, wird es auch aus der Überwachung entfernt.",
+    "Monitoring zapnutý.":"Überwachung aktiviert.","Monitoring vypnutý.":"Überwachung deaktiviert.","Príliš veľa neúspešných pokusov. Skús to znova o 15 minút.":"Zu viele fehlgeschlagene Versuche. Bitte in 15 Minuten erneut versuchen.","@default_pw_warn":"Du verwendest noch das Standardpasswort. Ändere es unter Einstellungen → Passwort.",
     "Držať históriu toku (dní)":"Traffic-Verlauf aufbewahren (Tage)",
     "Držať históriu (dní)":"Verlauf aufbewahren (Tage)","Vzorkovať odozvu každých (s)":"Latenz erfassen alle (s)","@help_history":"Älterer Verlauf wird automatisch gelöscht. Die Latenz wird im angegebenen Intervall erfasst, jede Statusänderung wird jedoch immer gespeichert (0 = jeder Zyklus – die Datenbank wächst schnell).",
     "Časové pásmo":"Zeitzone","Automaticky zo servera":"Automatisch (vom Server)","Čas na serveri:":"Serverzeit:","@help_timezone":"Zeitzone für alle Zeitangaben in der App, Ereignisse und Telegram-Nachrichten. „Automatisch“ übernimmt die Systemeinstellung des Servers.",
@@ -230,7 +242,7 @@
     "@login_sub":"Netzwerk- und Geräteüberwachung",
     "@help_appearance":"Farbthema der Anwendung. „Automatisch“ richtet sich nach den Systemeinstellungen.",
     "@help_telegram":"Bei Ausfall oder Wiederherstellung eines Geräts wird eine Nachricht an Telegram gesendet (nativ, kein wget nötig). Token über <b>@BotFather</b> erstellen; die Chat-ID der Gruppe/des Kanals z. B. über <b>@getidsbot</b> oder <b>@RawDataBot</b> ermitteln.",
-    "@tg_incomplete":"Token ist unvollständig — er muss einen Doppelpunkt enthalten, z. B. <b>1783615761:AAF…</b> (der vollständige Token von @BotFather).",
+    "@tg_incomplete":"Token ist unvollständig — er muss einen Doppelpunkt enthalten, z. B. <b>123456789:AAF…</b> (der vollständige Token von @BotFather).",
     "@tg_ok":"✅ Test gesendet — Telegram prüfen.",
     "@tg_err_token":"Falscher <b>Token</b> — stelle sicher, dass du den ganzen Token inklusive des Teils nach dem Doppelpunkt eingefügt hast.",
     "@tg_err_chat":"Falsche <b>Chat-ID</b> — für Gruppe/Kanal meist negativ (z. B. -1001234567890). Der Bot muss Mitglied der Gruppe sein.",
@@ -244,6 +256,10 @@
     "@iv_saved":"Gespeichert. Kartenaktualisierung gilt sofort, Messung ab dem nächsten Poller-Zyklus."
   },
   pl:{
+    "Otestovať teraz":"Testuj teraz","Testujem ping a služby…":"Testuję ping i usługi…","odpovedá":"odpowiada","neodpovedá":"brak odpowiedzi","vypnutá":"wyłączona","Kontroluje":"Sprawdza","@svc_down_hint":"Urządzenie działa, ale usługa nie odpowiada. Jeśli jej już nie używasz (np. The Dude na porcie 2210), usuń ją w zakładce Usługi.",
+    "Zmazať zariadenie":"Usuń urządzenie","@del_device_hint":"Zostanie usunięte ze wszystkich map i z monitorowania, łącznie z usługami i historią.",
+    "@del_node_hint":"Jeśli urządzenie jest tylko na tej mapie, zostanie usunięte także z monitorowania.",
+    "Monitoring zapnutý.":"Monitorowanie włączone.","Monitoring vypnutý.":"Monitorowanie wyłączone.","Príliš veľa neúspešných pokusov. Skús to znova o 15 minút.":"Zbyt wiele nieudanych prób. Spróbuj ponownie za 15 minut.","@default_pw_warn":"Nadal używasz domyślnego hasła. Zmień je w Ustawienia → Hasło.",
     "Držať históriu toku (dní)":"Przechowuj historię ruchu (dni)",
     "Držať históriu (dní)":"Przechowuj historię (dni)","Vzorkovať odozvu každých (s)":"Próbkuj opóźnienie co (s)","@help_history":"Starsza historia jest usuwana automatycznie. Opóźnienie jest próbkowane w podanym odstępie, ale każda zmiana stanu jest zapisywana zawsze (0 = każdy cykl – baza szybko rośnie).",
     "Časové pásmo":"Strefa czasowa","Automaticky zo servera":"Automatycznie (z serwera)","Čas na serveri:":"Czas serwera:","@help_timezone":"Strefa czasowa dla wszystkich godzin w aplikacji, zdarzeń i wiadomości Telegram. „Automatycznie” używa ustawienia systemowego serwera.",
@@ -305,7 +321,7 @@
     "@login_sub":"monitoring sieci i urządzeń",
     "@help_appearance":"Motyw kolorystyczny aplikacji. „Automatycznie” zależy od ustawień systemu.",
     "@help_telegram":"Przy awarii lub przywróceniu urządzenia wysyłana jest wiadomość na Telegram (natywnie, bez wget). Token utworzysz przez <b>@BotFather</b>, ID czatu grupy/kanału sprawdzisz np. przez <b>@getidsbot</b> lub <b>@RawDataBot</b>.",
-    "@tg_incomplete":"Token jest niepełny — musi zawierać dwukropek, np. <b>1783615761:AAF…</b> (pełny token z @BotFather).",
+    "@tg_incomplete":"Token jest niepełny — musi zawierać dwukropek, np. <b>123456789:AAF…</b> (pełny token z @BotFather).",
     "@tg_ok":"✅ Test wysłany — sprawdź Telegram.",
     "@tg_err_token":"Błędny <b>token</b> — upewnij się, że wkleiłeś cały token wraz z częścią po dwukropku.",
     "@tg_err_chat":"Błędny <b>Chat ID</b> — dla grupy/kanału zwykle ujemny (np. -1001234567890). Bot musi być członkiem grupy.",
@@ -319,6 +335,10 @@
     "@iv_saved":"Zapisano. Odświeżanie mapy działa od razu, pomiar od następnego cyklu pollera."
   },
   hu:{
+    "Otestovať teraz":"Tesztelés most","Testujem ping a služby…":"Ping és szolgáltatások tesztelése…","odpovedá":"válaszol","neodpovedá":"nem válaszol","vypnutá":"kikapcsolva","Kontroluje":"Ellenőrzi","@svc_down_hint":"Az eszköz elérhető, de egy szolgáltatás nem válaszol. Ha már nem használod (pl. The Dude a 2210-es porton), töröld a Szolgáltatások fülön.",
+    "Zmazať zariadenie":"Eszköz törlése","@del_device_hint":"Minden térképről és a megfigyelésből is törlődik, a szolgáltatásokkal és előzményekkel együtt.",
+    "@del_node_hint":"Ha az eszköz csak ezen a térképen szerepel, a megfigyelésből is törlődik.",
+    "Monitoring zapnutý.":"Megfigyelés bekapcsolva.","Monitoring vypnutý.":"Megfigyelés kikapcsolva.","Príliš veľa neúspešných pokusov. Skús to znova o 15 minút.":"Túl sok sikertelen próbálkozás. Próbáld újra 15 perc múlva.","@default_pw_warn":"Még mindig az alapértelmezett jelszót használod. Változtasd meg: Beállítások → Jelszó.",
     "Držať históriu toku (dní)":"Forgalmi előzmények megőrzése (nap)",
     "Držať históriu (dní)":"Előzmények megőrzése (nap)","Vzorkovať odozvu každých (s)":"Válaszidő mintavétele (s)","@help_history":"Az ennél régebbi előzmények automatikusan törlődnek. A válaszidő a megadott időközönként kerül rögzítésre, de minden állapotváltozás mindig mentésre kerül (0 = minden ciklus – az adatbázis gyorsan nő).",
     "Časové pásmo":"Időzóna","Automaticky zo servera":"Automatikus (a szerverről)","Čas na serveri:":"Szerveridő:","@help_timezone":"Az alkalmazásban megjelenő időpontok, események és Telegram-üzenetek időzónája. Az „Automatikus” a szerver rendszerbeállítását használja.",
@@ -380,7 +400,7 @@
     "@login_sub":"hálózat- és eszközfelügyelet",
     "@help_appearance":"Az alkalmazás színtémája. Az „Automatikus” a rendszerbeállítást követi.",
     "@help_telegram":"Eszköz kiesésekor vagy helyreállásakor üzenet érkezik a Telegramra (natívan, wget nélkül). A tokent a <b>@BotFather</b> segítségével hozd létre; a csoport/csatorna chat ID-jét pl. a <b>@getidsbot</b> vagy <b>@RawDataBot</b> adja meg.",
-    "@tg_incomplete":"A token hiányos — tartalmaznia kell kettőspontot, pl. <b>1783615761:AAF…</b> (a teljes token a @BotFather-től).",
+    "@tg_incomplete":"A token hiányos — tartalmaznia kell kettőspontot, pl. <b>123456789:AAF…</b> (a teljes token a @BotFather-től).",
     "@tg_ok":"✅ Teszt elküldve — nézd meg a Telegramot.",
     "@tg_err_token":"Hibás <b>token</b> — győződj meg róla, hogy a teljes tokent beillesztetted, a kettőspont utáni résszel együtt.",
     "@tg_err_chat":"Hibás <b>Chat ID</b> — csoport/csatorna esetén általában negatív (pl. -1001234567890). A botnak a csoport tagjának kell lennie.",
@@ -394,12 +414,16 @@
     "@iv_saved":"Mentve. A térkép frissítése azonnal érvényes, a mérés a következő poller ciklustól."
   },
   sk:{
+    "@svc_down_hint":"Zariadenie žije, ale služba neodpovedá. Ak ju už nepoužívaš (napr. The Dude na porte 2210), zmaž ju v karte Služby.",
+    "@del_device_hint":"Odstráni sa zo všetkých máp aj z monitoringu, vrátane služieb a histórie.",
+    "@del_node_hint":"Ak je zariadenie len na tejto mape, odstráni sa aj z monitoringu.",
+    "@default_pw_warn":"Stále používaš predvolené heslo. Zmeň ho v Nastavenia → Heslo.",
     "@help_history":"Staršia história sa automaticky maže. Odozva sa vzorkuje v zadanom intervale, každá zmena stavu sa však zapíše vždy (0 = zapisovať každý cyklus – databáza rýchlo rastie).",
     "@help_timezone":"Časové pásmo pre všetky časy v aplikácii, udalosti a Telegram správy. „Automaticky“ použije systémové nastavenie servera.", // len aliasy (kľúč '@...') – bežné SK kľúče = identita
     "@login_sub":"monitoring siete a zariadení",
     "@help_appearance":"Farebná téma aplikácie. „Automaticky“ sa riadi nastavením systému.",
     "@help_telegram":"Pri výpadku alebo obnove zariadenia príde správa do Telegramu (natívne, netreba wget). Token vytvoríš cez <b>@BotFather</b>, chat ID skupiny/kanála zistíš napr. cez <b>@getidsbot</b> alebo <b>@RawDataBot</b>.",
-    "@tg_incomplete":"Token je neúplný — musí obsahovať dvojbodku, napr. <b>1783615761:AAF…</b> (celý token od @BotFather).",
+    "@tg_incomplete":"Token je neúplný — musí obsahovať dvojbodku, napr. <b>123456789:AAF…</b> (celý token od @BotFather).",
     "@tg_ok":"✅ Test odoslaný — skontroluj Telegram.",
     "@tg_err_token":"Nesprávny <b>token</b> — skontroluj, že si vložil celý token vrátane časti za dvojbodkou.",
     "@tg_err_chat":"Nesprávny <b>Chat ID</b> — pre skupinu/kanál býva záporný (napr. -1001234567890). Bot musí byť členom skupiny.",

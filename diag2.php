@@ -1,19 +1,23 @@
 <?php
 /** NetPulse – kde sa stratil čas medzi výpadkom a hlásením.
  *  php diag2.php 2026-09-17            (deň, ktorý chceme rozobrať)
- *  php diag2.php 2026-09-17 "SK_Basic" (aj filter na názov)
+ *  php diag2.php 2026-09-17 "Router1" (aj filter na názov)
  */
+require __DIR__ . '/cli_guard.php';   // len z príkazového riadka, nie ako root
 require __DIR__ . '/db.php';
+np_cli_guard();
 $pdo = db();
 $day = $argv[1] ?? date('Y-m-d');
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $day)) { fwrite(STDERR, "Dátum v tvare RRRR-MM-DD\n"); exit(1); }
+$dayFrom = "$day 00:00:00"; $dayTo = date('Y-m-d', strtotime("$day +1 day")) . ' 00:00:00';
 $needle = $argv[2] ?? null;
 echo "\n\033[1m== Výpadky dňa $day ==\033[0m\n";
 echo "  started = kedy prestalo odpovedať | detected = kedy monitor vyhlásil down | lag = oneskorenie\n\n";
 $sql = "SELECT o.id,o.device_id,o.started,o.ended,o.duration,d.name,d.ip
         FROM outages o LEFT JOIN devices d ON d.id=o.device_id
-        WHERE o.started LIKE ? " . ($needle ? "AND d.name LIKE ? " : "") . "ORDER BY o.started";
+        WHERE o.started >= ? AND o.started < ? " . ($needle ? "AND d.name LIKE ? " : "") . "ORDER BY o.started";
 $st = $pdo->prepare($sql);
-$st->execute($needle ? [$day.'%', '%'.$needle.'%'] : [$day.'%']);
+$st->execute($needle ? [$dayFrom, $dayTo, '%'.$needle.'%'] : [$dayFrom, $dayTo]);
 $rows = $st->fetchAll();
 if (!$rows) { echo "  (žiadne zaznamenané výpadky v tento deň)\n"; }
 $evD = $pdo->prepare("SELECT ts FROM events WHERE device_id=? AND status='down' AND ts>=? ORDER BY ts LIMIT 1");
@@ -23,7 +27,9 @@ foreach ($rows as $r) {
     $det = $evD->fetchColumn();
     $lag = $det ? (strtotime($det) - strtotime($r['started'])) : null;
     if ($lag !== null && $lag > $maxLag) $maxLag = $lag;
-    $dur = $r['duration'] !== null ? gmdate('H:i:s', (int)$r['duration']) : ($r['ended'] ? '?' : 'trvá');
+    $sec = (int)$r['duration'];
+    $dur = $r['duration'] !== null ? (intdiv($sec, 86400) ? intdiv($sec, 86400).' d ' : '') . gmdate('H:i:s', $sec % 86400)
+                                   : ($r['ended'] ? '?' : 'trvá');
     printf("  %s -> detected %-19s  \033[1mlag %s\033[0m | trvanie %s | %s (%s)\n",
         $r['started'], $det ?: 'ŽIADNA UDALOSŤ', $lag === null ? '?' : $lag.'s', $dur,
         substr((string)$r['name'],0,40), $r['ip']);
@@ -32,7 +38,8 @@ if ($maxLag > 120) echo "\n  \033[31mNajväčšie oneskorenie: {$maxLag}s\033[0m
 
 echo "\n\033[1m== Medzery v behu monitoringu (podľa status_history) ==\033[0m\n";
 echo "  Odozva sa vzorkuje raz za minútu, takže medzery do ~150 s sú normálne.\n\n";
-$h = $pdo->query("SELECT DISTINCT ts FROM status_history WHERE ts LIKE '" . $day . "%' ORDER BY ts");
+$h = $pdo->prepare('SELECT DISTINCT ts FROM status_history WHERE ts >= ? AND ts < ? ORDER BY ts');
+$h->execute([$dayFrom, $dayTo]);
 $prev = null; $gaps = 0;
 foreach ($h as $r) {
     if ($prev) {

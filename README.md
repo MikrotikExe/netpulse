@@ -32,18 +32,18 @@ It can **import an existing `The Dude` database** (`dude.db`) so you don't have 
 
 - **Interactive maps** — devices, links and sub-maps rendered as SVG, faithfully following the Dude layout (positions, link styles: solid / dotted / dashed, thickness). Auto-sized sub-map circles.
 - **Import from The Dude** — one-click import from an existing `dude.db` (maps, devices, device types, icons, probes, services, links, SNMP profiles). Maps keep their original Dude order.
-- **Live monitoring** — three-state status (up / pending / down) like Dude. Uses `fping` for fast parallel ICMP, with a **TCP-connect fallback** so it works even on shared hosting where ICMP/`exec` is blocked.
+- **Live monitoring** — three-state status (up / pending / down) like Dude. Uses `fping` for fast parallel ICMP plus **parallel TCP checks** (services and fallback ports), so even a large outage with dozens of unreachable devices is checked within a couple of seconds — and it still works on shared hosting where ICMP/`exec` is blocked.
 - **Real per-interface traffic** — SNMP polling of `ifHCInOctets`/`ifHCOutOctets` (64-bit, with 32-bit fallback) turned into live Rx/Tx bps on each link.
 - **Utilization-based link colors** — link color shifts across a full spectrum based on interface utilization %, visible even at low load.
 - **Graphs** — traffic history recorded over time per link, with a dedicated *Graphs* section.
-- **Telegram notifications** — native PHP (no `wget`/`curl` shell-out), fully configurable in the UI.
+- **Telegram notifications** — native PHP (no `wget`/`curl` shell-out), fully configurable in the UI. Alerts are queued: if Telegram is unreachable they are retried with back-off instead of being lost, and a down/up pair that piles up while Telegram is offline is merged into one *"was down from X to Y"* message.
 - **User roles** — `administrator` (full access incl. backup/restore & resetting others' passwords), `admin` (user management), `user` (read-only + change own password).
 - **Editing from the web** — add/edit/delete devices, links (line type via dialog) and maps directly in the browser.
 - **Backup / restore** and re-import from the Settings screen.
 - **Multi-language** — UI available in English, Slovak, Czech, German, Polish and Hungarian; pick your language on the login screen or later in Settings -> Appearance (saved in your browser).
 - **Automatic time zone** — detected from the server on first run, overridable in Settings -> Appearance. Event times and Telegram messages always match your local clock.
 - **Self-maintaining database** — status and traffic history are sampled and pruned automatically, so the database stays small and fast no matter how long NetPulse runs.
-- **Crash-resistant workers** — writes that hit a busy database are retried instead of killing the monitoring cycle, and a failed Telegram send is re-sent on the next pass rather than lost.
+- **Crash-resistant workers** — each monitoring cycle probes the whole network first and then records all results in one short transaction, so a busy database never leaves half-written state, duplicate events or dangling outages.
 - **Modern UI** — light / dark / auto themes, responsive layout with touch controls, sortable tables with sticky headers, clean SVG device icons.
 
 ## Requirements
@@ -52,7 +52,7 @@ It can **import an existing `The Dude` database** (`dude.db`) so you don't have 
 - A web server — **nginx + php-fpm** recommended (Apache + mod_php works too)
 - For live **ICMP** status: **`fping`** (`apt install fping`) and PHP's `exec()` must be enabled (not listed in `disable_functions`). Without it, NetPulse automatically falls back to TCP-connect checks, so it still works on locked-down/shared hosting.
 - For **SNMP traffic**: the **net-snmp** CLI tools **`snmpget` / `snmpwalk`** (`apt install snmp`) *or* the PHP `snmp` extension
-- SQLite works out of the box (no DB server); MySQL/MariaDB is optional for larger / multi-user setups
+- SQLite works out of the box (no DB server); MySQL 8 / MariaDB 10.6+ is optional for larger / multi-user setups. For MySQL create the database with `CHARACTER SET utf8mb4` and set `DB_DRIVER` directly in `config.php` (PHP-FPM clears environment variables by default). Importing from The Dude needs `pdo_sqlite` either way, because `dude.db` itself is SQLite.
 
 On Debian/Ubuntu a typical install:
 
@@ -105,6 +105,8 @@ server {
         fastcgi_pass unix:/run/php/php8.2-fpm.sock;   # adjust to your FPM socket
     }
     location ~ ^/(data|\.git) { deny all; }   # never serve the database / sessions / git
+    # CLI workers and libraries are not web pages (they also refuse to run outside the CLI)
+    location ~ ^/(monitor|snmp_poll|cleanup|diag2?|import_dude|importer|DudeParser|db|config|telegram|snmp_lib|probe_lib|auth|cli_guard)\.php$ { deny all; }
 }
 ```
 
@@ -184,6 +186,16 @@ Configuration lives in `config.php` — DB driver, MySQL credentials (if used), 
 
 The values in `config.php` are starting defaults. Time zone, history retention, Telegram, SNMP profiles and poll intervals can all be changed at runtime in the **Settings** screen, which stores them in the database and takes precedence over `config.php`.
 
+## Upgrading
+
+Replace the application files (keep `config.php` and `data/`) and restart the workers:
+
+```bash
+sudo systemctl restart netpulse-monitor netpulse-snmp
+```
+
+Database migrations run automatically on the first request or monitoring cycle — new columns, tables and indexes are added in place, existing data is kept.
+
 ## Maintenance
 
 NetPulse prunes its own history every hour, so under normal operation there is nothing to do. Two things are worth knowing.
@@ -202,7 +214,7 @@ php cleanup.php --run 14 --tok 30
 sudo systemctl start netpulse-monitor netpulse-snmp
 ```
 
-Run it as the same user the web server uses (typically `www-data`), and **always stop the workers first** — `VACUUM` cannot shrink the file while another process holds the database open, and it will take far longer.
+Run it as the same user the web server uses (`sudo -u www-data php cleanup.php …`) — the maintenance scripts refuse to run as root, because root-owned `-wal`/`-shm` files would lock the web app and the monitor out of the database. And **always stop the workers first** — `VACUUM` cannot shrink the file while another process holds the database open, and it will take far longer.
 
 ## Troubleshooting
 
@@ -216,9 +228,13 @@ php diag2.php 2026-09-19        # outage detection lag and gaps in monitoring fo
 
 **Alerts arrive late, or not at all.** Run `php diag2.php <date>`. The *lag* column is the delay between a device going silent and the outage being declared; roughly `DOWN_AFTER` plus one cycle is normal. Large *gaps* mean the monitor was not running at all — check `journalctl -u netpulse-monitor` for that window.
 
+**A service is red but the device is green.** The device answers ping, but one of its services does not — e.g. an imported *dude* probe that checks TCP port 2210 of a server that no longer runs The Dude. The *Services* list shows what each service checks, and *Tools → Test now* in the device window runs ping and every service check on the spot. Delete services you no longer need.
+
 **No alert for a short outage.** Outages shorter than `DOWN_AFTER` never turn red and never notify, by design. Lower it in `config.php` if you want to catch brief drops, at the cost of more messages from flapping devices.
 
-**`database is locked` in the logs.** Make sure `journal_mode` is `wal` (`php diag.php` prints it) and that the indexes exist — run `php cleanup.php --run`. An occasional *"DB locked after 6 attempts, write skipped"* line is harmless: that cycle is skipped and the next one recovers.
+**Telegram messages stopped arriving.** `php diag.php` shows how many messages are waiting in the queue. While Telegram is unreachable, messages are retried with increasing delay (30 s up to 15 min) and dropped after 24 hours; the log shows *"odoslanie zlyhalo"* with the HTTP code. A wrong bot token or a bot that is not a member of the chat also shows up here.
+
+**`database is locked` in the logs.** Make sure `journal_mode` is `wal` (`php diag.php` prints it) and that the indexes exist — run `php cleanup.php --run`. An occasional *"výsledky NEZAPÍSANÉ (DB zamknutá)"* line is harmless: that cycle's results are discarded as a whole and the next cycle measures again, so nothing is half-written.
 
 **Monitoring cycle is slow.** Time it with `time php monitor.php`. Install `fping` if it is missing — without it devices are pinged one at a time. Each unreachable device also costs one second per port in `TCP_FALLBACK_PORTS`, so trimming that list speeds up large outages.
 
@@ -242,7 +258,9 @@ snmp_lib.php       SNMP get/walk helpers (v1/v2c/v3)
 snmp_poll.php      SNMP traffic poller (loop worker)
 telegram.php       Native Telegram sender
 db.php / config.php  PDO layer, retry-on-busy helpers & configuration
-cleanup.php        Maintenance: prune history, add indexes, VACUUM
+probe_lib.php      Availability probes (fping, parallel TCP) shared by the monitor and "Test now"
+cli_guard.php      Keeps CLI scripts from running via the web or as root
+cleanup.php        Maintenance: prune history, add indexes, VACUUM (--siroty: devices on no map)
 diag.php           Diagnostics: environment, monitoring and Telegram health
 diag2.php          Diagnostics: detection lag and gaps in monitoring
 schema_*.sql       SQLite / MySQL schema
@@ -251,7 +269,10 @@ schema_*.sql       SQLite / MySQL schema
 ## Security notes
 
 - Real network data (`dude.db`, `data/app.db`, sessions) is **git-ignored** — this repo ships clean, with no topology or credentials.
-- Change default credentials on first login.
+- Change default credentials on first login — the app shows a warning banner until you do. New passwords must be at least 8 characters.
+- Sign-in is rate-limited: after 10 failed attempts from one IP address, that address is blocked for 15 minutes. (Behind a reverse proxy such as Cloudflare every visitor shares the proxy's address — configure nginx `real_ip` so PHP sees the real client IP.)
+- Database backups (which contain password hashes, device credentials, SNMP secrets and the Telegram token) can only be downloaded by an `administrator`. SNMP communities and v3 passwords are likewise visible to administrators only.
+- All state-changing API calls require `POST` with a custom header, so a foreign website cannot trigger them through a logged-in browser (CSRF).
 - SNMP community strings / v3 credentials and Telegram tokens are stored in your local database, not in the code.
 
 ## Roadmap

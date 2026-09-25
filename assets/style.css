@@ -442,3 +442,7 @@ th .arr{color:var(--accent);font-size:10px;margin-left:3px}
 .login-credit{display:inline-flex;align-items:center;gap:6px;align-self:center;margin-top:6px;padding:5px 13px;border-radius:999px;background:var(--panel2);border:1px solid var(--border);color:var(--muted);font-size:12px;font-weight:500;text-decoration:none;transition:border-color .15s,color .15s,box-shadow .15s}
 .login-credit .cic{width:14px;height:14px;color:var(--accent);flex-shrink:0}
 .login-credit:hover{border-color:var(--accent);color:var(--text);box-shadow:0 0 0 3px rgba(139,124,240,.14)}
+
+/* riadky tabuliek, ktoré otvoria okno zariadenia */
+tr.row-click{cursor:pointer}
+tr.row-click:hover td{background:var(--hover, rgba(127,127,127,.08))}

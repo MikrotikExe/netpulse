@@ -12,6 +12,7 @@ return [
     // Časové pásmo aplikácie (časy vo výpisoch, udalostiach a Telegram správach)
     // Časové pásmo. Prázdne = zistí sa automaticky zo servera; zmeniť sa dá aj v Nastaveniach.
     'APP_TIMEZONE'=> getenv('DUDEWEB_TZ') ?: '',
+    // Pre MySQL/MariaDB zmeň priamo tu ('mysql') – PHP-FPM premenné prostredia štandardne nevidí (clear_env).
     'DB_DRIVER'   => getenv('DUDEWEB_DRIVER') ?: 'sqlite',
     'SQLITE_PATH' => __DIR__ . '/data/app.db',
     'MYSQL_HOST'  => '127.0.0.1',

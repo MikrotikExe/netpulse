@@ -3,6 +3,41 @@
 require_once __DIR__ . '/db.php';
 
 const REMEMBER_SECONDS = 60 * 60 * 24 * 30; // „Zapamätať prihlásenie" = 30 dní
+const NP_MIN_PASSWORD   = 8;                 // minimálna dĺžka nového hesla
+const NP_LOGIN_MAX_FAILS = 10;               // toľko neúspešných pokusov z jednej IP…
+const NP_LOGIN_WINDOW    = 900;              // …za 15 minút => dočasná blokácia
+
+function np_password_ok(string $p): bool {
+    return (function_exists('mb_strlen') ? mb_strlen($p, 'UTF-8') : strlen($p)) >= NP_MIN_PASSWORD;
+}
+function np_client_ip(): string { return substr((string)($_SERVER['REMOTE_ADDR'] ?? '?'), 0, 64); }
+
+/** Je IP dočasne zablokovaná po opakovaných neúspešných prihláseniach? */
+function np_login_blocked(): bool {
+    try {
+        $st = db()->prepare('SELECT COUNT(*) FROM login_fail WHERE ip=? AND ts>?');
+        $st->execute([np_client_ip(), time() - NP_LOGIN_WINDOW]);
+        return (int)$st->fetchColumn() >= NP_LOGIN_MAX_FAILS;
+    } catch (Throwable $e) { return false; }
+}
+function np_login_fail_record(): void {
+    try {
+        $pdo = db();
+        $pdo->prepare('INSERT INTO login_fail(ip,ts) VALUES(?,?)')->execute([np_client_ip(), time()]);
+        $pdo->prepare('DELETE FROM login_fail WHERE ts<?')->execute([time() - NP_LOGIN_WINDOW]);
+    } catch (Throwable $e) {}
+}
+function np_login_fail_clear(): void {
+    try { db()->prepare('DELETE FROM login_fail WHERE ip=?')->execute([np_client_ip()]); } catch (Throwable $e) {}
+}
+/** Má prihlásený používateľ stále predvolené heslo „admin"? (upozornenie v aplikácii) */
+function np_default_password_active(): bool {
+    try {
+        $st = db()->prepare('SELECT pass_hash FROM users WHERE id=?'); $st->execute([current_uid()]);
+        $h = $st->fetchColumn();
+        return $h && password_verify('admin', (string)$h);
+    } catch (Throwable $e) { return false; }
+}
 
 function np_is_secure(): bool {
     return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
@@ -27,6 +62,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 function ensure_users_table(): void {
     $pdo = db();
+    try { migrate(); } catch (Throwable $e) {}   // tabuľky ako login_fail musia existovať už pri prihlásení
     if (cfg('DB_DRIVER') === 'mysql') {
         $pdo->exec("CREATE TABLE IF NOT EXISTS users(id BIGINT PRIMARY KEY AUTO_INCREMENT,
             username VARCHAR(64) UNIQUE, pass_hash VARCHAR(255), role VARCHAR(16) DEFAULT 'user',
@@ -44,12 +80,14 @@ function ensure_users_table(): void {
     }
     // zaruč aspoň jedného administrátora
     if ((int)$pdo->query("SELECT COUNT(*) FROM users WHERE role='administrator'")->fetchColumn() === 0) {
-        $pdo->exec("UPDATE users SET role='administrator' WHERE id=(SELECT MIN(id) FROM users)");
+        $min = $pdo->query('SELECT MIN(id) FROM users')->fetchColumn();   // bez poddotazu – MySQL 8 by hlásil chybu 1093
+        if ($min !== false && $min !== null) $pdo->prepare("UPDATE users SET role='administrator' WHERE id=?")->execute([$min]);
     }
 }
 
 function try_login(string $u, string $p, bool $remember = false): bool {
     ensure_users_table();
+    if (np_login_blocked()) return false;
     $st = db()->prepare('SELECT id,username,pass_hash,role FROM users WHERE username=?');
     $st->execute([$u]);
     $row = $st->fetch();
@@ -58,26 +96,28 @@ function try_login(string $u, string $p, bool $remember = false): bool {
         $_SESSION['uid'] = $row['id'];
         $_SESSION['user'] = $row['username'];
         $_SESSION['role'] = $row['role'] ?: 'user';
-        $secure = np_is_secure();
+        np_login_fail_clear();
+        $opt = fn(int $exp) => ['expires'=>$exp, 'path'=>'/', 'domain'=>'', 'secure'=>np_is_secure(),
+                                'httponly'=>true, 'samesite'=>'Lax'];
         if ($remember) {
             // zapamätaj voľbu aj predĺž platnosť session cookie
-            setcookie('np_remember', '1', time() + REMEMBER_SECONDS, '/', '', $secure, true);
-            setcookie(session_name(), session_id(), time() + REMEMBER_SECONDS, '/', '', $secure, true);
+            setcookie('np_remember', '1', $opt(time() + REMEMBER_SECONDS));
+            setcookie(session_name(), session_id(), $opt(time() + REMEMBER_SECONDS));
         } else {
-            setcookie('np_remember', '', time() - 3600, '/', '', $secure, true);
+            setcookie('np_remember', '', $opt(time() - 3600));
         }
         return true;
     }
+    np_login_fail_record();
+    usleep(400000);   // spomaľ hádanie hesla
     return false;
 }
 
 function logout(): void {
     $_SESSION = [];
-    $secure = np_is_secure();
-    setcookie('np_remember', '', time() - 3600, '/', '', $secure, true);
-    if (ini_get('session.use_cookies')) {
-        setcookie(session_name(), '', time() - 3600, '/', '', $secure, true);
-    }
+    $opt = ['expires'=>time() - 3600, 'path'=>'/', 'domain'=>'', 'secure'=>np_is_secure(), 'httponly'=>true, 'samesite'=>'Lax'];
+    setcookie('np_remember', '', $opt);
+    if (ini_get('session.use_cookies')) setcookie(session_name(), '', $opt);
     session_destroy();
 }
 function current_user(): ?string { return $_SESSION['user'] ?? null; }

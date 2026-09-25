@@ -26,15 +26,17 @@ function dude_import(string $path): array {
     $t = $pdo->prepare($repl('device_types') . '(id,name,icon) VALUES(?,?,?)');
     foreach ($data['types'] as $x) $t->execute([$x['id'],$x['name'],$x['icon']]);
 
-    $d = $pdo->prepare($repl('devices') .
-        '(id,name,ip,dns,snmp_profile,username,password,type_id,status,last_check,rtt,monitored) VALUES(?,?,?,?,?,?,?,?,
-           COALESCE((SELECT status FROM devices WHERE id=?),\'unknown\'),
-           (SELECT last_check FROM devices WHERE id=?),
-           (SELECT rtt FROM devices WHERE id=?),
-           COALESCE((SELECT monitored FROM devices WHERE id=?),1))');
+    // Upsert: pri opätovnom importe prepíše len údaje z Dude a ZACHOVÁ stav monitoringu
+    // (status, down_since, notified, monitored…). REPLACE by riadok zmazal a stav stratil;
+    // poddotaz do tej istej tabuľky navyše MySQL 8 odmieta (chyba 1093).
+    $upd = 'name,ip,dns,snmp_profile,username,password,type_id';
+    $d = $pdo->prepare('INSERT INTO devices(id,' . $upd . ",status,monitored) VALUES(?,?,?,?,?,?,?,?,'unknown',1) "
+        . (cfg('DB_DRIVER') === 'mysql'
+            ? 'ON DUPLICATE KEY UPDATE ' . implode(',', array_map(fn($c) => "$c=VALUES($c)", explode(',', $upd)))
+            : 'ON CONFLICT(id) DO UPDATE SET ' . implode(',', array_map(fn($c) => "$c=excluded.$c", explode(',', $upd)))));
     foreach ($data['devices'] as $x)
         $d->execute([$x['id'],$x['name'],$x['ip'],$x['dns'],$x['snmp_profile'],
-                     $x['username'],$x['password']??'',$x['type_id'],$x['id'],$x['id'],$x['id'],$x['id']]);
+                     $x['username'],$x['password']??'',$x['type_id']]);
 
     $p = $pdo->prepare($repl('probes') . '(id,name,type,port,dns_name) VALUES(?,?,?,?,?)');
     foreach ($data['probes'] as $x) $p->execute([$x['id'],$x['name'],$x['type'],$x['port'],$x['dns_name']]);

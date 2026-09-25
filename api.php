@@ -3,18 +3,30 @@
 require __DIR__ . '/auth.php';
 require __DIR__ . '/telegram.php';
 require __DIR__ . '/snmp_lib.php';
+require __DIR__ . '/probe_lib.php';
 require_login(true);
 header('Content-Type: application/json; charset=utf-8');
 $pdo = db();
 migrate();
-$a = $_REQUEST['action'] ?? '';
-$in = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+$a = (string)($_GET['action'] ?? '');
+// Akcie, ktoré len čítajú. Všetko ostatné mení dáta => len POST s hlavičkou X-NetPulse
+// (cudzia stránka ju bez CORS povolenia poslať nevie – ochrana proti CSRF).
+$readActions = ['maps','map','device','probes','ping_now','probe_now','devices','services','faults','events','summary',
+                'live_status','link_types','snmp_profiles_list','snmp_interfaces','get_settings','timezones',
+                'graph_sources','graph_data','device_types','whoami','client_config','users_list','backup'];
+if (!in_array($a, $readActions, true)) {
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || ($_SERVER['HTTP_X_NETPULSE'] ?? '') !== '1') {
+        http_response_code(403); echo json_encode(['error'=>'Neplatná požiadavka']); exit;
+    }
+}
+$in = json_decode(file_get_contents('php://input'), true);
+if (!is_array($in)) $in = $_POST;
 $nextId = fn(string $t) => (int)$pdo->query("SELECT COALESCE(MAX(id),1000000)+1 FROM $t")->fetchColumn();
 
 // editačné akcie: len admin/administrator (user = len čítanie)
 $editActions=['move','add_node','new_device','del_node','add_link','del_link','add_map',
               'move_map','reorder_maps','update_device','add_service','del_service',
-              'toggle_service','toggle_monitor','update_link','snmp_profile_save','snmp_profile_delete'];
+              'toggle_service','toggle_monitor','update_link','snmp_profile_save','snmp_profile_delete','delete_device'];
 if(in_array($a,$editActions,true)) require_role('admin');
 
 /** Počty zariadení podľa mapy: total/up/down/unknown (pre submapy aj panel). */
@@ -32,6 +44,88 @@ function mapStats(PDO $pdo): array {
 }
 
 try {
+
+/** Súhrn stavov pre horný panel – vypnutý monitoring sa ráta ako „neznáme". */
+function np_summary(PDO $pdo): array {
+    return $pdo->query(
+        "SELECT COUNT(*) total,
+           SUM(CASE WHEN COALESCE(monitored,1)=1 AND status='up' THEN 1 ELSE 0 END) up,
+           SUM(CASE WHEN COALESCE(monitored,1)=1 AND status='pending' THEN 1 ELSE 0 END) pending,
+           SUM(CASE WHEN COALESCE(monitored,1)=1 AND status='down' THEN 1 ELSE 0 END) down,
+           SUM(CASE WHEN COALESCE(monitored,1)=0 OR status='unknown' OR status IS NULL THEN 1 ELSE 0 END) unknown
+         FROM devices")->fetch();
+}
+
+/** Obnova SQLite zálohy BEZ prepísania súboru pod bežiacimi procesmi (monitor, SNMP poller
+ *  majú DB otvorenú vo WAL – prepis súboru by ju mohol poškodiť). Tabuľky sa skopírujú
+ *  z pripojenej zálohy v jednej transakcii, takže ostatné procesy len chvíľu počkajú. */
+function np_restore_sqlite(PDO $pdo, string $file): array {
+    try {
+        $chk = new PDO('sqlite:' . $file); $chk->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $integ = (string)$chk->query('PRAGMA quick_check')->fetchColumn();
+        $hasDev = (int)$chk->query("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='devices'")->fetchColumn();
+        $chk = null;
+    } catch (Throwable $e) { return ['error'=>'Súbor zálohy sa nedá otvoriť']; }
+    if ($integ !== 'ok') return ['error'=>'Záloha je poškodená (integrity check zlyhal)'];
+    if (!$hasDev)        return ['error'=>'Súbor nie je záloha NetPulse (chýba tabuľka devices)'];
+
+    $dst = cfg('SQLITE_PATH'); $pre = $dst . '.before-restore';
+    @unlink($pre);
+    try { $pdo->exec('VACUUM INTO ' . $pdo->quote($pre)); } catch (Throwable $e) { error_log('NetPulse restore – záloha pred obnovou: '.$e->getMessage()); }
+
+    $pdo->exec('ATTACH DATABASE ' . $pdo->quote($file) . ' AS src');
+    try {
+        $ok = db_tx(function (PDO $pdo) {
+            $tables = $pdo->query("SELECT name FROM src.sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+                          ->fetchAll(PDO::FETCH_COLUMN);
+            // používateľov prevezmi len ak záloha obsahuje administrátora s heslom (inak by sa nikto neprihlásil
+            // alebo by vznikol predvolený admin/admin)
+            $usersOk = false;
+            if (in_array('users', $tables, true)) {
+                try { $usersOk = (int)$pdo->query("SELECT COUNT(*) FROM src.users WHERE role='administrator'
+                                                    AND pass_hash IS NOT NULL AND pass_hash<>''")->fetchColumn() > 0; }
+                catch (Throwable $e) { $usersOk = false; }
+            }
+            foreach ($tables as $t) {
+                if (!preg_match('/^[A-Za-z0-9_]+$/', (string)$t)) continue;
+                if ($t === 'login_fail' || ($t === 'users' && !$usersOk)) continue;
+                $exists = (int)$pdo->query("SELECT COUNT(*) FROM main.sqlite_master WHERE type='table' AND name=" . $pdo->quote($t))->fetchColumn();
+                if (!$exists) {   // tabuľka zo zálohy, ktorú aktuálna DB nemá
+                    $sql = (string)$pdo->query("SELECT sql FROM src.sqlite_master WHERE type='table' AND name=" . $pdo->quote($t))->fetchColumn();
+                    if ($sql) $pdo->exec($sql);
+                }
+                $cm = array_column($pdo->query("PRAGMA main.table_info($t)")->fetchAll(), 'name');
+                $cs = array_column($pdo->query("PRAGMA src.table_info($t)")->fetchAll(), 'name');
+                $cols = array_values(array_intersect($cm, $cs));
+                if (!$cols) continue;
+                $list = implode(',', array_map(fn($c) => '"' . str_replace('"', '""', $c) . '"', $cols));
+                $pdo->exec("DELETE FROM main.$t");
+                $pdo->exec("INSERT INTO main.$t($list) SELECT $list FROM src.$t");
+            }
+            $pdo->exec('DELETE FROM main.notify_queue');   // staré neodoslané správy zo zálohy neposielaj
+        }, 8);
+    } catch (Throwable $e) {
+        error_log('NetPulse restore: '.$e->getMessage());
+        $ok = false;
+    } finally {
+        try { $pdo->exec('DETACH DATABASE src'); } catch (Throwable $e) {}
+    }
+    if (!$ok) return ['error'=>'Obnova zlyhala, databáza ostala nezmenená'];
+    try { setting_set('schema_ver', '0'); } catch (Throwable $e) {}   // doplň prípadné nové stĺpce
+    return ['ok'=>true];
+}
+
+/** Vypnutý monitoring: zariadenie zmizne z porúch, otvorený výpadok sa uzavrie
+ *  a po opätovnom zapnutí sa prípadný výpadok nahlási odznova. */
+function np_monitoring_off(PDO $pdo, int $id): void {
+    $pdo->prepare("UPDATE devices SET status='unknown',rtt=NULL,down_since=NULL,down_ts=NULL,notified='up' WHERE id=?")->execute([$id]);
+    $now = date('Y-m-d H:i:s');
+    $st = $pdo->prepare('SELECT id,started,started_ts FROM outages WHERE device_id=? AND ended IS NULL');
+    $st->execute([$id]);
+    $cl = $pdo->prepare('UPDATE outages SET ended=?,duration=? WHERE id=?');
+    foreach ($st->fetchAll() as $o) { $s = np_epoch($o['started_ts'], $o['started']); $cl->execute([$now, $s ? max(0, time() - $s) : null, $o['id']]); }
+}
+
     switch ($a) {
 
     case 'maps':
@@ -64,11 +158,20 @@ try {
                 $n['status'] = $st['down'] > 0 ? 'down' : ($st['total'] ? 'up' : 'unknown');
             }
         }
-        $lq = $pdo->prepare('SELECT l.id,l.from_node,l.to_node,l.width,l.style,l.thickness,l.ltype,l.label,l.snmp_device,l.snmp_ifindex,t.rx_bps,t.tx_bps,t.speed_bps FROM map_links l LEFT JOIN link_traffic t ON t.link_id=l.id WHERE l.map_id=?');
+        $lq = $pdo->prepare('SELECT l.id,l.from_node,l.to_node,l.width,l.style,l.thickness,l.ltype,l.label,l.snmp_device,l.snmp_ifindex,t.rx_bps,t.tx_bps,t.speed_bps,t.ts,t.ts_unix FROM map_links l LEFT JOIN link_traffic t ON t.link_id=l.id WHERE l.map_id=?');
         $lq->execute([$id]);
+        $links = $lq->fetchAll();
+        // zastaraný tok (zariadenie neodpovedá na SNMP) nezobrazuj ako aktuálny
+        $stale = max(120, 3 * (int) setting_get('snmp_interval', 30)); $tnow = time();
+        foreach ($links as &$lk) {
+            $t = np_epoch($lk['ts_unix'] ?? null, $lk['ts'] ?? null);
+            if ($t !== null && $tnow - $t > $stale) { $lk['rx_bps'] = null; $lk['tx_bps'] = null; }
+            unset($lk['ts'], $lk['ts_unix']);
+        }
+        unset($lk);
         echo json_encode([
             'map'   => $pdo->query('SELECT id,name FROM maps WHERE id=' . $id)->fetch(),
-            'nodes' => $nodes, 'links' => $lq->fetchAll(),
+            'nodes' => $nodes, 'links' => $links,
         ]); break;
 
     case 'device':
@@ -82,6 +185,7 @@ try {
         $hi->execute([$id]);
         $ou = $pdo->prepare('SELECT service,started,ended,duration FROM outages WHERE device_id=? ORDER BY id DESC LIMIT 100');
         $ou->execute([$id]);
+        if ($dev && !has_role('admin')) { unset($dev['password'], $dev['username']); }   // prihlasovacie údaje len editorom
         echo json_encode([
             'device'=>$dev,'services'=>$sv->fetchAll(),
             'history'=>array_reverse($hi->fetchAll()),'outages'=>$ou->fetchAll()]); break;
@@ -90,18 +194,35 @@ try {
         echo json_encode($pdo->query('SELECT id,name,type,port FROM probes ORDER BY name')->fetchAll()); break;
 
     case 'update_device':
+        $ipIn = trim((string)($in['ip'] ?? '')); $dnsIn = trim((string)($in['dns'] ?? ''));
+        if ($ipIn !== '' && !np_valid_host($ipIn))  { echo json_encode(['error'=>'Neplatná IP adresa']); break; }
+        if ($dnsIn !== '' && !np_valid_host($dnsIn)) { echo json_encode(['error'=>'Neplatný DNS názov']); break; }
+        if (trim((string)($in['name'] ?? '')) === '') { echo json_encode(['error'=>'Názov je povinný']); break; }
         $mon = empty($in['monitored']) ? 0 : 1;
         $pdo->prepare('UPDATE devices SET name=?,ip=?,dns=?,type_id=?,username=?,password=?,monitored=?,snmp_profile=? WHERE id=?')
             ->execute([trim($in['name']),trim($in['ip'] ?? ''),trim($in['dns'] ?? ''),
                        $in['type_id'] ?: null,trim($in['username'] ?? ''),(string)($in['password'] ?? ''),$mon,
                        (isset($in['snmp_profile'])&&$in['snmp_profile']!=='')?(int)$in['snmp_profile']:null,(int)$in['id']]);
-        if (!$mon) $pdo->prepare("UPDATE devices SET status='unknown',rtt=NULL,down_since=NULL WHERE id=?")->execute([(int)$in['id']]);
+        if (!$mon) np_monitoring_off($pdo, (int)$in['id']);
         echo json_encode(['ok'=>true]); break;
+
+    case 'delete_device':
+        // zmaže zariadenie zo všetkých máp aj z monitoringu (aj keď na žiadnej mape nie je)
+        $did = (int)($in['id'] ?? 0);
+        if ($did <= 0) { echo json_encode(['error'=>'Chýba zariadenie']); break; }
+        $ok = db_tx(function (PDO $pdo) use ($did) {
+            $nodes = $pdo->prepare('SELECT id FROM map_nodes WHERE device_id=?'); $nodes->execute([$did]);
+            $dl = $pdo->prepare('DELETE FROM map_links WHERE from_node=? OR to_node=?');
+            foreach ($nodes->fetchAll(PDO::FETCH_COLUMN) as $nid) $dl->execute([$nid, $nid]);
+            $pdo->prepare('DELETE FROM map_nodes WHERE device_id=?')->execute([$did]);
+            np_delete_device($pdo, $did);
+        });
+        echo json_encode($ok ? ['ok'=>true] : ['error'=>'Databáza je zaneprázdnená – skús znova']); break;
 
     case 'toggle_monitor':
         $mon = empty($in['monitored']) ? 0 : 1;
         $pdo->prepare('UPDATE devices SET monitored=? WHERE id=?')->execute([$mon,(int)$in['id']]);
-        if (!$mon) $pdo->prepare("UPDATE devices SET status='unknown',rtt=NULL,down_since=NULL WHERE id=?")->execute([(int)$in['id']]);
+        if (!$mon) np_monitoring_off($pdo, (int)$in['id']);
         echo json_encode(['ok'=>true]); break;
 
     case 'add_service':
@@ -130,6 +251,38 @@ try {
         $out=[]; exec($cmd,$out,$rc);
         echo json_encode(['ok'=>$rc===0,'output'=>implode("\n",$out)]); break;
 
+    case 'probe_now':
+        // Okamžitý test zariadenia presne tak, ako ho robí monitor: ping + každá služba.
+        // Nič nezapisuje – stav v mape aktualizuje monitor v najbližšom cykle.
+        $id = (int)($_GET['id'] ?? 0);
+        $st = $pdo->prepare('SELECT id,name,ip FROM devices WHERE id=?'); $st->execute([$id]); $dv = $st->fetch();
+        if (!$dv) { echo json_encode(['error'=>'Zariadenie nenájdené']); break; }
+        $ip = trim((string)$dv['ip']);
+        if (!np_valid_host($ip)) { echo json_encode(['error'=>'Zariadenie nemá platnú IP adresu']); break; }
+        $out = [];
+        $pingOk = false; $pingMs = null;
+        if (exec_allowed()) {
+            if (fping_available()) { $al = fping_batch([$ip], 1000); if (array_key_exists($ip, $al)) { $pingOk = true; $pingMs = $al[$ip]; } }
+            else { $o = []; @exec('ping -c 1 -W 1 '.escapeshellarg($ip).' 2>/dev/null', $o, $rc); $pingOk = ($rc === 0);
+                   if ($pingOk && preg_match('/time[=<]([\d.]+)/', implode("\n",$o), $m)) $pingMs = (float)$m[1]; }
+            $out[] = ['check'=>'Ping (ICMP)', 'ok'=>$pingOk, 'ms'=>$pingMs];
+        }
+        $sv = $pdo->prepare('SELECT id,name,ptype,port,enabled FROM services WHERE device_id=? ORDER BY name'); $sv->execute([$id]);
+        $svcs = $sv->fetchAll(); $tcp = [];
+        foreach ($svcs as $s) if ($s['ptype'] === 'tcp') $tcp['s'.$s['id']] = [$ip, (int)$s['port']];
+        $tcpOk = $tcp ? tcp_probe_batch($tcp, 2.0) : [];
+        foreach ($svcs as $s) {
+            $label = $s['name'] . ' (' . strtoupper((string)$s['ptype']) . ($s['port'] ? ' '.$s['port'] : '') . ')';
+            switch ($s['ptype']) {
+                case 'tcp':  $ok = isset($tcpOk['s'.$s['id']]); $ms = $tcpOk['s'.$s['id']] ?? null; break;
+                case 'dns':  $ok = dns_check($ip); $ms = null; break;
+                case 'snmp': $ok = snmp_check($ip, (int)$s['port'] ?: 161); $ms = null; break;
+                default:     $ok = $pingOk; $ms = $pingMs;
+            }
+            $out[] = ['check'=>$label, 'ok'=>$ok, 'ms'=>$ms, 'service'=>true, 'enabled'=>(string)$s['enabled'] !== '0'];
+        }
+        echo json_encode(['ok'=>true, 'results'=>$out]); break;
+
     case 'devices':
         $q = '%' . ($_GET['q'] ?? '') . '%';
         $s = $pdo->prepare(
@@ -141,27 +294,26 @@ try {
 
     case 'services':
         echo json_encode($pdo->query(
-            "SELECT s.name,s.status,s.down,d.name dev_name,d.ip
+            "SELECT s.id,s.name,s.status,s.down,s.device_id,s.ptype,s.port,s.enabled,d.name dev_name,d.ip
              FROM services s JOIN devices d ON d.id=s.device_id
              ORDER BY (s.status='down') DESC, d.name LIMIT 500")->fetchAll()); break;
 
     case 'faults':
-        echo json_encode($pdo->query(
-            "SELECT id,name,ip,status,last_check,rtt FROM devices
-             WHERE status='down' ORDER BY last_check DESC")->fetchAll()); break;
+        $rows = $pdo->query(
+            "SELECT id,name,ip,status,last_check,rtt,down_since FROM devices
+             WHERE status='down' AND (monitored=1 OR monitored IS NULL)
+             ORDER BY down_since")->fetchAll();
+        $t = time();
+        foreach ($rows as &$r) $r['duration'] = $r['down_since'] ? max(0, $t - strtotime($r['down_since'])) : null;
+        unset($r);
+        echo json_encode($rows); break;
 
     case 'events':
         echo json_encode($pdo->query(
             'SELECT ts,device_name,ip,status,message FROM events ORDER BY ts DESC LIMIT 100')->fetchAll()); break;
 
     case 'summary':
-        $r = $pdo->query(
-            "SELECT COUNT(*) total,
-               SUM(CASE WHEN status='up' THEN 1 ELSE 0 END) up,
-               SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) pending,
-               SUM(CASE WHEN status='down' THEN 1 ELSE 0 END) down,
-               SUM(CASE WHEN status='unknown' OR status IS NULL THEN 1 ELSE 0 END) unknown
-             FROM devices")->fetch();
+        $r = np_summary($pdo);
         $r['maps'] = (int)$pdo->query('SELECT COUNT(*) FROM maps')->fetchColumn();
         $r['services'] = (int)$pdo->query('SELECT COUNT(*) FROM services')->fetchColumn();
         echo json_encode($r); break;
@@ -172,12 +324,7 @@ try {
         $rows = $pdo->query("SELECT DISTINCT d.id,d.status FROM devices d
                              JOIN map_nodes n ON n.device_id=d.id WHERE n.map_id=$id")->fetchAll();
         $devs = []; foreach ($rows as $r) $devs[$r['id']] = $r['status'];
-        $sum = $pdo->query("SELECT COUNT(*) total,
-               SUM(CASE WHEN status='up' THEN 1 ELSE 0 END) up,
-               SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) pending,
-               SUM(CASE WHEN status='down' THEN 1 ELSE 0 END) down,
-               SUM(CASE WHEN status='unknown' OR status IS NULL THEN 1 ELSE 0 END) unknown
-             FROM devices")->fetch();
+        $sum = np_summary($pdo);
         $mp = mapStats($pdo);
         echo json_encode(['devices'=>$devs,'summary'=>$sum,'mapstats'=>$mp]); break;
 
@@ -194,6 +341,7 @@ try {
         echo json_encode(['ok'=>true,'node'=>$nid]); break;
 
     case 'new_device':
+        if (trim((string)($in['ip'] ?? '')) !== '' && !np_valid_host((string)$in['ip'])) { echo json_encode(['error'=>'Neplatná IP adresa']); break; }
         $did = $nextId('devices');
         $pdo->prepare("INSERT INTO devices(id,name,ip,type_id,status) VALUES(?,?,?,?,'unknown')")
             ->execute([$did,trim($in['name']),trim($in['ip'] ?? ''),$in['type_id'] ?? null]);
@@ -203,10 +351,22 @@ try {
         echo json_encode(['ok'=>true,'node'=>$nid,'device_id'=>$did]); break;
 
     case 'del_node':
+        // Zmazanie ikony z mapy. Ak to bol POSLEDNÝ výskyt zariadenia, odstráni sa aj zariadenie –
+        // inak by ostalo neviditeľne v databáze a monitorovalo by sa (a hlásilo výpadky) ďalej.
         $n = (int)$in['node'];
-        $pdo->prepare('DELETE FROM map_links WHERE from_node=? OR to_node=?')->execute([$n,$n]);
-        $pdo->prepare('DELETE FROM map_nodes WHERE id=?')->execute([$n]);
-        echo json_encode(['ok'=>true]); break;
+        $st = $pdo->prepare('SELECT device_id FROM map_nodes WHERE id=?'); $st->execute([$n]);
+        $devId = (int)($st->fetchColumn() ?: 0);
+        $devDeleted = false;
+        $ok = db_tx(function (PDO $pdo) use ($n, $devId, &$devDeleted) {
+            $devDeleted = false;
+            $pdo->prepare('DELETE FROM map_links WHERE from_node=? OR to_node=?')->execute([$n,$n]);
+            $pdo->prepare('DELETE FROM map_nodes WHERE id=?')->execute([$n]);
+            if ($devId) {
+                $c = $pdo->prepare('SELECT COUNT(*) FROM map_nodes WHERE device_id=?'); $c->execute([$devId]);
+                if ((int)$c->fetchColumn() === 0) { np_delete_device($pdo, $devId); $devDeleted = true; }
+            }
+        });
+        echo json_encode($ok ? ['ok'=>true,'device_deleted'=>$devDeleted] : ['error'=>'Databáza je zaneprázdnená – skús znova']); break;
 
     case 'add_link':
         $lid = $nextId('map_links');
@@ -265,11 +425,19 @@ try {
         echo json_encode(['ok'=>true]); break;
 
     case 'snmp_profiles_list':
-        echo json_encode($pdo->query('SELECT id,name,community,version,port,sec_name,auth_pass,priv_pass,auth_proto,priv_proto FROM snmp_profiles ORDER BY name')->fetchAll()); break;
+        // community a v3 heslá sú prístupové údaje k sieti – vidí ich len administrator
+        $cols = has_role('administrator') ? 'id,name,community,version,port,sec_name,auth_pass,priv_pass,auth_proto,priv_proto'
+                                          : 'id,name,version,port';
+        echo json_encode($pdo->query("SELECT $cols FROM snmp_profiles ORDER BY name")->fetchAll()); break;
 
     case 'snmp_profile_save':
+        require_role('administrator');
         $id=(isset($in['id'])&&$in['id'])?(int)$in['id']:$nextId('snmp_profiles');
         $ver=(int)($in['version']??0);
+        if (!in_array($ver, [0,1,2], true)) { echo json_encode(['error'=>'Neplatná verzia SNMP']); break; }
+        $in['auth_proto'] = snmp_auth_proto($in['auth_proto'] ?? 'MD5');   // len povolené hodnoty (idú do príkazu snmpget)
+        $in['priv_proto'] = snmp_priv_proto($in['priv_proto'] ?? 'DES');
+        $port = (int)($in['port'] ?? 161); if ($port < 1 || $port > 65535) $port = 161; $in['port'] = $port;
         $repl2 = cfg('DB_DRIVER')==='mysql' ? 'REPLACE INTO' : 'INSERT OR REPLACE INTO';
         $pdo->prepare("$repl2 snmp_profiles(id,name,community,version,port,sec_name,auth_pass,priv_pass,auth_proto,priv_proto) VALUES(?,?,?,?,?,?,?,?,?,?)")
             ->execute([$id,trim($in['name']??''),trim($in['community']??'public'),$ver,(int)($in['port']??161)?:161,
@@ -278,6 +446,7 @@ try {
         echo json_encode(['ok'=>true,'id'=>$id]); break;
 
     case 'snmp_profile_delete':
+        require_role('administrator');
         $pdo->prepare('DELETE FROM snmp_profiles WHERE id=?')->execute([(int)$in['id']]);
         echo json_encode(['ok'=>true]); break;
 
@@ -316,11 +485,14 @@ try {
         if(array_key_exists('tg_enabled',$in)) setting_set('tg_enabled', !empty($in['tg_enabled'])?'1':'0');
         if(array_key_exists('tg_token',$in)) setting_set('tg_token', trim($in['tg_token'] ?? ''));
         if(array_key_exists('tg_chat',$in)) setting_set('tg_chat', trim($in['tg_chat'] ?? ''));
+        if(array_key_exists('tg_token',$in) || array_key_exists('tg_chat',$in) || array_key_exists('tg_enabled',$in)) {
+            setting_set('tg_block_until', '0'); setting_set('tg_fail_streak', '0');
+        }
         if(array_key_exists('snmp_interval',$in)) setting_set('snmp_interval', max(3,(int)$in['snmp_interval']));
         if(array_key_exists('map_refresh',$in)) setting_set('map_refresh', max(2,(int)$in['map_refresh']));
-        if(array_key_exists('history_days',$in))  setting_set('history_days',  max(1,(int)$in['history_days']));
-        if(array_key_exists('history_every',$in)) setting_set('history_every', max(0,(int)$in['history_every']));
-        if(array_key_exists('traffic_days',$in))  setting_set('traffic_days',  max(1,(int)$in['traffic_days']));
+        if(isset($in['history_days'])  && is_numeric($in['history_days'])  && (int)$in['history_days'] >= 1)  setting_set('history_days',  (int)$in['history_days']);
+        if(isset($in['history_every']) && is_numeric($in['history_every']) && (int)$in['history_every'] >= 0) setting_set('history_every', (int)$in['history_every']);
+        if(isset($in['traffic_days'])  && is_numeric($in['traffic_days'])  && (int)$in['traffic_days'] >= 1)  setting_set('traffic_days',  (int)$in['traffic_days']);
         if(array_key_exists('timezone',$in)) {
             $tz = trim((string)$in['timezone']);
             if ($tz !== '' && !np_tz_valid($tz)) {
@@ -339,6 +511,7 @@ try {
         $chat=trim($in['tg_chat'] ?? setting_get('tg_chat',''));
         if($token===''||$chat===''){ echo json_encode(['error'=>'Zadaj token aj chat ID']); break; }
         $r=tg_send($token,$chat,'✅ NetPulse test — Telegram funguje.');
+        if(!empty($r['ok'])){ setting_set('tg_block_until','0'); setting_set('tg_fail_streak','0'); }
         echo json_encode($r['ok']?['ok'=>true]:['error'=>'Nepodarilo sa: '.substr((string)($r['resp']??$r['err']??'chyba'),0,200)]); break;
 
     case 'graph_sources':
@@ -382,13 +555,15 @@ try {
         $u = current_user();
         $st = $pdo->prepare('SELECT pass_hash FROM users WHERE username=?'); $st->execute([$u]);
         $h = $st->fetchColumn();
-        if (!password_verify($in['old'] ?? '', $h)) { echo json_encode(['error'=>'Staré heslo nesedí']); break; }
+        if (!password_verify((string)($in['old'] ?? ''), (string)$h)) { echo json_encode(['error'=>'Staré heslo nesedí']); break; }
+        if (!np_password_ok((string)($in['new'] ?? ''))) { echo json_encode(['error'=>'Heslo musí mať aspoň '.NP_MIN_PASSWORD.' znakov']); break; }
         $pdo->prepare('UPDATE users SET pass_hash=? WHERE username=?')
-            ->execute([password_hash($in['new'], PASSWORD_DEFAULT), $u]);
+            ->execute([password_hash((string)$in['new'], PASSWORD_DEFAULT), $u]);
+        session_regenerate_id(true);
         echo json_encode(['ok'=>true]); break;
 
     case 'whoami':
-        echo json_encode(['user'=>current_user(),'role'=>current_role()]); break;
+        echo json_encode(['user'=>current_user(),'role'=>current_role(),'default_pw'=>np_default_password_active()]); break;
 
     case 'client_config':
         echo json_encode(['map_refresh'=>(int)setting_get('map_refresh',10)]); break;
@@ -401,6 +576,7 @@ try {
         require_role('admin');
         $u=trim($in['username']??''); $pw=(string)($in['password']??''); $role=$in['role']??'user';
         if($u===''||$pw===''){ echo json_encode(['error'=>'Meno aj heslo sú povinné']); break; }
+        if(!np_password_ok($pw)){ echo json_encode(['error'=>'Heslo musí mať aspoň '.NP_MIN_PASSWORD.' znakov']); break; }
         if(!in_array($role,['user','admin','administrator'],true)) $role='user';
         if(!has_role('administrator') && $role!=='user'){ echo json_encode(['error'=>'Vyššiu rolu môže prideliť len administrator']); break; }
         try{ $pdo->prepare('INSERT INTO users(username,pass_hash,role,created) VALUES(?,?,?,?)')
@@ -433,17 +609,27 @@ try {
         require_role('administrator');
         $id=(int)($in['id']??0); $pw=(string)($in['new']??'');
         if($pw===''){ echo json_encode(['error'=>'Zadaj nové heslo']); break; }
+        if(!np_password_ok($pw)){ echo json_encode(['error'=>'Heslo musí mať aspoň '.NP_MIN_PASSWORD.' znakov']); break; }
         $pdo->prepare('UPDATE users SET pass_hash=? WHERE id=?')->execute([password_hash($pw,PASSWORD_DEFAULT),$id]);
         echo json_encode(['ok'=>true]); break;
 
     case 'backup':
-        require_role('admin');
+        // obsahuje hashe hesiel, heslá zariadení, SNMP údaje a Telegram token => len administrator
+        require_role('administrator');
         if(cfg('DB_DRIVER')!=='sqlite'){ echo json_encode(['error'=>'Záloha cez web je pre SQLite; pri MySQL použi mysqldump']); break; }
-        $f=cfg('SQLITE_PATH');
+        @set_time_limit(600);
+        // Konzistentná kópia aj s dátami, ktoré sú ešte vo WAL (obyčajné kopírovanie súboru by ich vynechalo)
+        $f = tempnam(sys_get_temp_dir(), 'npbak'); @unlink($f); $tmpUsed = true;
+        try { $pdo->exec('VACUUM INTO '.$pdo->quote($f)); }
+        catch (Throwable $e) {
+            error_log('NetPulse backup VACUUM INTO: '.$e->getMessage());
+            try { $pdo->exec('PRAGMA wal_checkpoint(FULL)'); } catch (Throwable $e2) {}
+            $f = cfg('SQLITE_PATH'); $tmpUsed = false;
+        }
         header('Content-Type: application/octet-stream');
         header('Content-Disposition: attachment; filename="netpulse-backup-'.date('Y-m-d_His').'.db"');
         header('Content-Length: '.filesize($f));
-        readfile($f); exit;
+        readfile($f); if ($tmpUsed) @unlink($f); exit;
 
     case 'restore':
         require_role('administrator');
@@ -451,8 +637,10 @@ try {
         if(empty($_FILES['file']['tmp_name'])){ echo json_encode(['error'=>'Chýba súbor zálohy']); break; }
         $tmp=$_FILES['file']['tmp_name'];
         if(strpos((string)file_get_contents($tmp,false,null,0,16),'SQLite format 3')!==0){ echo json_encode(['error'=>'Neplatný súbor (nie je SQLite záloha)']); break; }
-        $dst=cfg('SQLITE_PATH'); @copy($dst,$dst.'.before-restore');
-        echo json_encode(@copy($tmp,$dst)?['ok'=>true]:['error'=>'Nepodarilo sa zapísať databázu']); break;
+        @set_time_limit(600);
+        $r = np_restore_sqlite($pdo, $tmp);
+        if (!empty($r['ok'])) logout();   // používatelia sa mohli zmeniť – prihlás sa znova
+        echo json_encode($r); break;
 
     case 'import_dude':
         require_role('administrator');
@@ -461,12 +649,15 @@ try {
         if(strpos((string)file_get_contents($tmp,false,null,0,16),'SQLite format 3')!==0){ echo json_encode(['error'=>'Neplatný dude.db (nie je SQLite)']); break; }
         require_once __DIR__.'/importer.php';
         try{ echo json_encode(['ok'=>true,'summary'=>dude_import($tmp)]); }
-        catch(Throwable $e){ echo json_encode(['error'=>$e->getMessage()]); }
+        catch(Throwable $e){ error_log('NetPulse import: '.$e->getMessage()); echo json_encode(['error'=>'Import zlyhal: '.$e->getMessage()]); }
         break;
 
     default:
         http_response_code(400); echo json_encode(['error'=>'neznáma akcia']);
     }
 } catch (Throwable $e) {
-    http_response_code(500); echo json_encode(['error'=>$e->getMessage()]);
+    error_log('NetPulse API ['.$a.']: '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
+    http_response_code(500);
+    echo json_encode(['error'=> db_is_locked($e) ? 'Databáza je práve zaneprázdnená – skús to znova'
+                                                  : 'Interná chyba servera (podrobnosti v logu)']);
 }

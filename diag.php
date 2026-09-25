@@ -4,9 +4,11 @@
  * Spustenie:  php diag.php            (v priečinku aplikácie)
  *             php diag.php "Nazov"    (aj detail konkrétneho zariadenia)
  */
+require __DIR__ . '/cli_guard.php';   // len z príkazového riadka, nie ako root
 require __DIR__ . '/db.php';
 require __DIR__ . '/telegram.php';
-migrate();
+np_cli_guard();
+try { migrate(); } catch (Throwable $e) {}
 $pdo = db();
 $hl = fn($s) => "\n\033[1m== $s ==\033[0m\n";
 $ok = fn($s) => "  \033[32mOK\033[0m   $s\n";
@@ -78,8 +80,23 @@ if ($rng && $rng['a'] && $rng['b']) {
 echo $hl('Telegram');
 $en = setting_get('tg_enabled','0'); $tok = trim((string)setting_get('tg_token','')); $chat = trim((string)setting_get('tg_chat',''));
 echo ($en === '1') ? $ok('notifikácie sú zapnuté') : $er('notifikácie sú VYPNUTÉ (Nastavenia → Telegram)');
-echo ($tok !== '') ? $ok('token je vyplnený (' . substr($tok,0,10) . '…)') : $er('token je prázdny');
+echo ($tok !== '') ? $ok('token je vyplnený') : $er('token je prázdny');
 echo ($chat !== '') ? $ok("chat ID: $chat") : $er('chat ID je prázdne');
+
+try {
+    $q = (int)$pdo->query('SELECT COUNT(*) FROM notify_queue')->fetchColumn();
+    echo $q ? $wr("vo fronte čaká $q neodoslaných správ (Telegram je asi nedostupný)") : $ok('fronta správ je prázdna');
+} catch (Throwable $e) {}
+
+try {
+    $orph = np_orphan_devices($pdo);
+    $orphMon = array_filter($orph, fn($o) => (string)$o['monitored'] !== '0' && trim((string)$o['ip']) !== '');
+    if ($orphMon) {
+        echo $wr(count($orphMon) . ' zariadení nie je na žiadnej mape, ale stále sa monitoruje:');
+        foreach (array_slice($orphMon, 0, 10) as $o) echo "        {$o['name']} ({$o['ip']}) – {$o['status']}\n";
+        echo "        Odstránenie: php cleanup.php --siroty --run\n";
+    }
+} catch (Throwable $e) {}
 
 // --- posledne udalosti ---
 echo $hl('Posledných 15 udalostí');

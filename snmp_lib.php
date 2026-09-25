@@ -7,13 +7,24 @@ function snmpwalk_cli(): bool { static $r=null; if($r!==null)return $r;
     if(!function_exists('exec'))return $r=false;
     @exec('command -v snmpwalk 2>/dev/null',$o,$rc); return $r=($rc===0 && !empty($o)); }
 
+/** Povolené SNMPv3 protokoly. Hodnoty idú do príkazu snmpget – nič iné nesmie prejsť. */
+function snmp_auth_proto($v): string {
+    $v = strtoupper(trim((string)$v));
+    return in_array($v, ['MD5','SHA','SHA-224','SHA-256','SHA-384','SHA-512'], true) ? $v : 'MD5';
+}
+function snmp_priv_proto($v): string {
+    $v = strtoupper(trim((string)$v));
+    return in_array($v, ['DES','AES','AES-192','AES-256'], true) ? $v : 'DES';
+}
+
 /** Zostaví SNMP argumenty pre net-snmp podľa profilu (v1/v2c/v3). */
 function snmp_authargs(array $p): string {
     $ver = (int)($p['version'] ?? 0);
     if ($ver === 2) { // v3
         $u = escapeshellarg($p['sec_name'] ?? '');
         $ap = (string)($p['auth_pass'] ?? ''); $pp = (string)($p['priv_pass'] ?? '');
-        $a = strtoupper($p['auth_proto'] ?? 'MD5'); $x = strtoupper($p['priv_proto'] ?? 'DES');
+        $a = escapeshellarg(snmp_auth_proto($p['auth_proto'] ?? 'MD5'));
+        $x = escapeshellarg(snmp_priv_proto($p['priv_proto'] ?? 'DES'));
         if ($ap !== '' && $pp !== '') return "-v3 -l authPriv -u $u -a $a -A " . escapeshellarg($ap) . " -x $x -X " . escapeshellarg($pp);
         if ($ap !== '') return "-v3 -l authNoPriv -u $u -a $a -A " . escapeshellarg($ap);
         return "-v3 -l noAuthNoPriv -u $u";
@@ -25,16 +36,16 @@ function snmp_authargs(array $p): string {
 /** SNMP GET viacerých OID naraz. @return array rovnakej dĺžky (null=chyba). */
 function snmp_get(string $ip, array $prof, array $oids): array {
     if (snmp_cli()) {
-        $cmd = 'snmpget ' . snmp_authargs($prof) . ' -Ovq -t 1 -r 1 '
+        $cmd = 'snmpget ' . snmp_authargs($prof) . ' -Ovq -Ot -t 1 -r 1 '   // -Ot: TimeTicks ako číslo
              . escapeshellarg($ip) . ' ' . implode(' ', array_map('escapeshellarg', $oids)) . ' 2>/dev/null';
         $out = []; @exec($cmd, $out, $rc); $res = [];
-        foreach ($oids as $i => $_) { $line=$out[$i]??''; $res[$i]=preg_match('/(\d+)/',$line,$m)?(float)$m[1]:null; }
+        foreach ($oids as $i => $_) { $line=trim($out[$i]??''); $res[$i]=preg_match('/^"?(\d+)"?$/',$line,$m)?(float)$m[1]:null; }
         return $res;
     }
     if (function_exists('snmpget')) {   // fallback len v1/v2c
         @snmp_set_valueretrieval(SNMP_VALUE_PLAIN); $res=[]; $c=$prof['community']??'public'; $v2=((int)($prof['version']??0))===1;
         foreach ($oids as $i=>$oid) { $val=$v2?@snmp2_get($ip,$c,$oid,1000000,1):@snmpget($ip,$c,$oid,1000000,1);
-            $res[$i]=($val!==false && preg_match('/(\d+)/',(string)$val,$m))?(float)$m[1]:null; }
+            $res[$i]=($val!==false && preg_match('/^"?(\d+)"?$/',trim((string)$val),$m))?(float)$m[1]:null; }
         return $res;
     }
     return array_fill(0,count($oids),null);

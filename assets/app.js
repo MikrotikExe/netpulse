@@ -4,9 +4,9 @@ const SVGNS='http://www.w3.org/2000/svg';
 const $=id=>document.getElementById(id);
 const api={
   get:(a,p={})=>fetch('api.php?action='+a+'&'+new URLSearchParams(p)).then(r=>r.json()),
-  post:(a,b)=>fetch('api.php?action='+a,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()),
+  post:(a,b)=>fetch('api.php?action='+a,{method:'POST',headers:{'Content-Type':'application/json','X-NetPulse':'1'},body:JSON.stringify(b)}).then(r=>r.json()),
 };
-const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const statusSk=s=>TR(({up:'funkčné',pending:'nereaguje',down:'nefunkčné',unknown:'neznáme'}[s]||'neznáme'));
 function fmtBps(v){if(v==null)return '–';v=+v;if(v>=1e9)return (v/1e9).toFixed(2)+' Gbps';if(v>=1e6)return (v/1e6).toFixed(2)+' Mbps';if(v>=1e3)return (v/1e3).toFixed(1)+' kbps';return Math.round(v)+' bps';}
 // farba linky podľa vyťaženia interface – plynulé spektrum (viditeľné aj pri nízkych %)
@@ -41,7 +41,17 @@ async function loadAlerts(){
   const f=await api.get('faults');
   const ul=$('alert-list');
   if(!f.length){ul.innerHTML='<li>'+TR('Žiadne aktívne poruchy')+' 🎉</li>';return;}
-  ul.innerHTML=f.map(d=>`<li><b>${esc(d.name)}</b><br>${esc(d.ip||'')} · ${esc(d.last_check||'')}</li>`).join('');
+  ul.innerHTML=f.map(d=>`<li><b>${esc(d.name)}</b><br>${esc(d.ip||'')} · ${esc(fmtDur(d.duration))}</li>`).join('');
+}
+/** trvanie výpadku v sekundách -> "2 d 3 h", "1 h 20 min", "45 s" */
+function fmtDur(s){
+  if(s===null||s===undefined||s==='')return '—';
+  s=Math.max(0,parseInt(s,10)||0);
+  const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
+  if(d)return d+' d '+h+' h';
+  if(h)return h+' h '+m+' min';
+  if(m)return m+' min';
+  return s+' s';
 }
 
 // ---------- sekcie ----------
@@ -291,7 +301,7 @@ function onDragUp(){
 async function onNodeClick(e,n){
   e.stopPropagation();
   if(S.mode==='delete'){
-    if(n.kind==='device'&&confirm(TR('Zmazať uzol')+' „'+(n.dev_name||n.label||n.id)+'"?')){
+    if(n.kind==='device'&&confirm(TR('Zmazať uzol')+' „'+(n.dev_name||n.label||n.id)+'"?\n\n'+TR('@del_node_hint'))){
       await api.post('del_node',{node:n.id});await selectMap(S.mapId);}
     return;
   }
@@ -318,7 +328,7 @@ async function openLinkDialog(l){
   const types=await api.get('link_types');
   $('link-type').innerHTML=types.map(t=>`<option value="${t.id}" ${t.name===l.ltype?'selected':''}>${esc(t.name)} — ${dashName(t.style)}, ${TR('hr.')}${t.thickness}</option>`).join('')||'<option>'+TR('(žiadne typy)')+'</option>';
   if(!linkDevs) linkDevs=await api.get('devices',{q:''});
-  $('link-dev').innerHTML='<option value="">'+TR('— žiadne —')+'</option>'+linkDevs.map(d=>`<option value="${d.id}" ${l.snmp_device==d.id?'selected':''}>${esc(d.name)}${d.ip?' ('+d.ip+')':''}</option>`).join('');
+  $('link-dev').innerHTML='<option value="">'+TR('— žiadne —')+'</option>'+linkDevs.map(d=>`<option value="${d.id}" ${l.snmp_device==d.id?'selected':''}>${esc(d.name)}${d.ip?' ('+esc(d.ip)+')':''}</option>`).join('');
   $('link-if').innerHTML = l.snmp_ifindex ? `<option value="${l.snmp_ifindex}" selected>ifIndex ${l.snmp_ifindex} (${TR('aktuálne')})</option>` : '<option value="">—</option>';
   $('link-msg').textContent='';
   $('dlg-link').classList.remove('hidden');
@@ -413,32 +423,37 @@ function cellCmp(a,b,k,cols){
   const va=(a[k]==null?'':String(a[k])).toLowerCase(), vb=(b[k]==null?'':String(b[k])).toLowerCase();
   return va<vb?-1:va>vb?1:0;
 }
-function buildTable(tblId,rows,cols,emptyMsg){
+function buildTable(tblId,rows,cols,emptyMsg,onRow){
   const st=sortState[tblId]||(sortState[tblId]={col:cols[0].key,dir:1});
   const sorted=[...rows].sort((a,b)=>cellCmp(a,b,st.col,cols)*st.dir);
   const head=cols.map(c=>`<th class="sortable" data-col="${c.key}">${c.label}${st.col===c.key?`<span class="arr">${st.dir>0?'▲':'▼'}</span>`:''}</th>`).join('');
-  const body=sorted.length?sorted.map(r=>'<tr>'+cols.map(c=>`<td>${c.render?c.render(r):esc(r[c.key]??'')}</td>`).join('')+'</tr>').join('')
+  const body=sorted.length?sorted.map((r,i)=>'<tr'+(onRow?` data-ri="${i}" class="row-click"`:'')+'>'+cols.map(c=>`<td>${c.render?c.render(r):esc(r[c.key]??'')}</td>`).join('')+'</tr>').join('')
     :`<tr><td colspan="${cols.length}" class="empty">${emptyMsg||TR('Žiadne dáta')}</td></tr>`;
   const el=$(tblId); el.innerHTML=`<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
-  el.querySelectorAll('th.sortable').forEach(th=>th.onclick=()=>{const c=th.dataset.col;if(st.col===c)st.dir*=-1;else{st.col=c;st.dir=1;}buildTable(tblId,rows,cols,emptyMsg);});
+  el.querySelectorAll('th.sortable').forEach(th=>th.onclick=()=>{const c=th.dataset.col;if(st.col===c)st.dir*=-1;else{st.col=c;st.dir=1;}buildTable(tblId,rows,cols,emptyMsg,onRow);});
+  if(onRow) el.querySelectorAll('tr.row-click').forEach(tr=>tr.onclick=()=>onRow(sorted[+tr.dataset.ri]));
 }
 async function loadDevices(){
   const d=await api.get('devices',{q:''});
   buildTable('tbl-devices',d,[
     {key:'name',label:TR('Názov')},{key:'ip',label:'IP',type:'ip'},
-    {key:'type_name',label:TR('Typ')},{key:'status',label:TR('Stav'),type:'status',render:x=>pill(x.status)}]);
+    {key:'type_name',label:TR('Typ')},{key:'status',label:TR('Stav'),type:'status',render:x=>pill(x.status)}],
+    undefined, r=>openDeviceDialog(r.id));
 }
 async function loadServices(){
   const d=await api.get('services');
+  d.forEach(x=>x.check=String(x.ptype||'').toUpperCase()+(x.port?' '+x.port:''));
   buildTable('tbl-services',d,[
-    {key:'name',label:TR('Služba')},{key:'dev_name',label:TR('Zariadenie')},
-    {key:'ip',label:'IP',type:'ip'},{key:'status',label:TR('Stav'),type:'status',render:x=>pill(x.status)}]);
+    {key:'name',label:TR('Služba')},{key:'check',label:TR('Kontroluje')},{key:'dev_name',label:TR('Zariadenie')},
+    {key:'ip',label:'IP',type:'ip'},{key:'status',label:TR('Stav'),type:'status',render:x=>pill(x.status)}],
+    undefined, r=>openDeviceDialog(r.device_id));
 }
 async function loadFaults(){
   const d=await api.get('faults');
   buildTable('tbl-faults',d,[
     {key:'name',label:TR('Zariadenie')},{key:'ip',label:'IP',type:'ip'},
-    {key:'last_check',label:TR('Od')}],TR('Žiadne poruchy')+' 🎉');
+    {key:'down_since',label:TR('Od')},
+    {key:'duration',label:TR('Trvanie'),render:x=>fmtDur(x.duration)}],TR('Žiadne poruchy')+' 🎉', r=>openDeviceDialog(r.id));
 }
 async function loadEvents(){
   const d=await api.get('events');
@@ -501,6 +516,7 @@ const roleSk=new Proxy({user:'Používateľ',admin:'Admin',administrator:'Admini
 const SNMPIC='<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12a7 7 0 0 1 14 0M8.5 12a3.5 3.5 0 0 1 7 0"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><path d="M2 9a11 11 0 0 1 20 0"/></svg>';
 async function loadSettings(){
   const me=await api.get('whoami'); S.role=me.role; S.user=me.user; S._me=me;
+  showDefaultPwWarning(me);
   S._srank={user:1,admin:2,administrator:3}[me.role]||1;
   let tabs=`<button data-sp="appearance">${UI.palette}<span>${TR('Vzhľad')}</span></button>`+
            `<button data-sp="password">${UI.key}<span>${TR('Heslo')}</span></button>`;
@@ -558,7 +574,7 @@ async function renderTzCard(p){
 function panelPassword(p){
   const me=S._me||{user:'',role:'user'};
   p.innerHTML=`<div class="settings-card"><h3>${UI.key} ${TR('Zmena môjho hesla')}</h3>
-    <div style="color:var(--muted);font-size:12px;margin-bottom:12px">${TR('Prihlásený:')} <b>${esc(me.user)}</b> · ${TR('rola:')} <b>${roleSk[me.role]||me.role}</b></div>
+    <div style="color:var(--muted);font-size:12px;margin-bottom:12px">${TR('Prihlásený:')} <b>${esc(me.user)}</b> · ${TR('rola:')} <b>${esc(roleSk[me.role]||me.role)}</b></div>
     <label>${TR('Staré heslo')}<input type="password" id="pw-old"></label>
     <label>${TR('Nové heslo')}<input type="password" id="pw-new"></label>
     <button class="btn" id="pw-save">${TR('Uložiť')}</button>
@@ -686,7 +702,7 @@ async function loadUsers(rank){
         <button class="mini u-pw" data-id="${u.id}">${TR('heslo')}</button>`;
     }
     actions+=`<button class="mini u-del" data-id="${u.id}">${TR('zmazať')}</button>`;
-    return `<div class="svc-row"><span class="grow">${esc(u.username)} <span style="color:var(--muted)">${roleSk[u.role]||u.role}</span></span>${actions}</div>`;
+    return `<div class="svc-row"><span class="grow">${esc(u.username)} <span style="color:var(--muted)">${esc(roleSk[u.role]||u.role)}</span></span>${actions}</div>`;
   }).join('')||'<div class="empty">'+TR('Žiadni používatelia')+'</div>';
   $('users-tbl').innerHTML=rows;
   document.querySelectorAll('.u-del').forEach(b=>b.onclick=async()=>{
@@ -703,13 +719,14 @@ async function doUpload(action,input,okMsg){
   if(action==='import_dude'&&!confirm(TR('Import prepíše mapy/zariadenia dátami z dude.db. Pokračovať?')))return;
   $('br-msg').textContent=TR('Nahrávam…');
   const fd=new FormData();fd.append('file',f);
-  const r=await fetch('api.php?action='+action,{method:'POST',body:fd}).then(x=>x.json()).catch(()=>({error:TR('Chyba prenosu')}));
+  const r=await fetch('api.php?action='+action,{method:'POST',headers:{'X-NetPulse':'1'},body:fd}).then(x=>x.json()).catch(()=>({error:TR('Chyba prenosu')}));
+  if(action==='restore'&&r&&r.ok){ location.href='login.php'; return; }   // po obnove sa treba prihlásiť znova
   $('br-msg').innerHTML=r.ok?'<span class="st-up">'+okMsg+'</span>':'<span class="st-down">'+esc(r.error||TR('Chyba'))+'</span>';
 }
 
 // ---------- štart ----------
 loadSummary();loadMaps();loadAlerts();
-api.get('whoami').then(w=>{S.role=w.role;S.user=w.user;document.body.dataset.role=w.role||'user';}).catch(()=>{});
+api.get('whoami').then(w=>{S.role=w.role;S.user=w.user;document.body.dataset.role=w.role||'user';showDefaultPwWarning(w);}).catch(()=>{});
 
 // ---- TÉMA (svetlá/tmavá/auto) ----
 const THEME_ICON={dark:UI.moon,light:UI.sun,auto:UI.mon};
@@ -775,9 +792,17 @@ async function loadDeviceDialog(){
       <label>${TR('Stav')}<input value="${statusSk(dev.status)}" disabled></label>
     </div>
     <label class="chk" style="margin:4px 2px 12px"><input type="checkbox" id="e-mon" ${String(dev.monitored)==='0'?'':'checked'}> ${TR('Monitorovať zariadenie')} <span style="color:var(--muted)">${TR('(vypnuté = sivé)')}</span></label>
-    <div class="modal-actions"><button class="btn" id="e-save">${TR('Uložiť')}</button></div>
+    <div class="modal-actions"><button class="btn" id="e-save">${TR('Uložiť')}</button>${canEdit()?`<button class="btn danger" id="e-del" style="margin-left:auto">${TR('Zmazať zariadenie')}</button>`:''}</div>
     <div id="e-msg" style="margin-top:8px;font-size:13px"></div>`;
   $('e-save').onclick=saveDevice;
+  if($('e-del')) $('e-del').onclick=async()=>{
+    if(!confirm(TR('Zmazať zariadenie')+' „'+(dev.name||'')+'"?\n\n'+TR('@del_device_hint'))) return;
+    const r=await api.post('delete_device',{id:curDev}).catch(()=>({error:TR('Chyba prenosu')}));
+    if(r&&r.ok){ $('dlg-device').classList.add('hidden'); $('inspector').classList.add('hidden');
+      loadSummary(); loadAlerts(); if(S.section&&S.section!=='maps') switchSection(S.section); if(S.mapId) selectMap(S.mapId); }
+    else { const em=$('e-msg'); if(em) em.innerHTML='<span class="st-down">'+esc((r&&r.error)||TR('Chyba'))+'</span>'; }
+  };
+  bindMonitorToggle();
   if(!canEdit()){
     document.querySelectorAll('#tab-obecne input,#tab-obecne select').forEach(x=>x.disabled=true);
     const es=$('e-save'); if(es)es.style.display='none';
@@ -795,14 +820,24 @@ async function loadDeviceDialog(){
   // Nástroje
   $('tab-nastroje').innerHTML=`
     <button class="btn" id="tool-ping">▶ ${TR('Ping')} ${esc(dev.ip||'')}</button>
-    <button class="btn ghost" id="tool-refresh">↻ ${TR('Znovu sondovať')}</button>
+    <button class="btn ghost" id="tool-refresh">↻ ${TR('Otestovať teraz')}</button>
     <pre class="tool-out" id="tool-out">${TR('Klikni Ping…')}</pre>`;
   $('tool-ping').onclick=async()=>{
     $('tool-out').textContent=TR('Pingujem…');
     const r=await api.get('ping_now',{ip:dev.ip||''});
     $('tool-out').textContent=(r.output||r.error||'')+'\n\n'+(r.ok?'✓ '+TR('Dostupné'):'✗ '+TR('Nedostupné'));
   };
-  $('tool-refresh').onclick=()=>loadDeviceDialog();
+  $('tool-refresh').onclick=async()=>{
+    const box=$('tool-out'); if(box) box.textContent=TR('Testujem ping a služby…');
+    const r=await api.get('probe_now',{id:curDev}).catch(()=>({error:TR('Chyba prenosu')}));
+    if(!box) return;
+    if(!r||r.error){ box.textContent=(r&&r.error)||TR('Chyba'); return; }
+    const lines=r.results.map(x=>(x.ok?'✓ ':'✗ ')+x.check+' – '+(x.ok?TR('odpovedá')+(x.ms!=null?' ('+x.ms+' ms)':''):TR('neodpovedá'))+(x.service&&!x.enabled?' ['+TR('vypnutá')+']':''));
+    const pingOk=r.results.some(x=>!x.service&&x.ok), svcBad=r.results.some(x=>x.service&&!x.ok&&x.enabled);
+    if(pingOk&&svcBad) lines.push('', TR('@svc_down_hint'));
+    if(!r.results.length) lines.push(TR('Žiadne služby'));
+    box.textContent=lines.join('\n');
+  };
 
   // ---- karta SNMP ----
   const profs=await api.get('snmp_profiles_list');
@@ -818,6 +853,29 @@ async function loadDeviceDialog(){
     <div style="margin-top:6px;font-size:12px;color:var(--muted)">${TR('Profily pridáš/upravíš v Nastavenia → SNMP.')}</div>
     <div id="e-snmp-msg" style="margin-top:8px;font-size:13px"></div>`;
   if(canEdit()){ const b=$('e-snmp-save'); if(b) b.onclick=async()=>{ await saveDevice(); const m=$('e-snmp-msg'); if(m) m.innerHTML='<span class="st-up">'+TR('Uložené.')+'</span>'; }; }
+}
+/** Pruh s upozornením, keď má používateľ stále predvolené heslo admin/admin. */
+function showDefaultPwWarning(me){
+  const old=document.getElementById('np-pw-warn'); if(old) old.remove();
+  if(!me||!me.default_pw) return;
+  const b=document.createElement('div'); b.id='np-pw-warn';
+  b.style.cssText='position:fixed;left:50%;transform:translateX(-50%);top:10px;z-index:9999;max-width:92vw;'+
+    'background:#b45309;color:#fff;padding:9px 14px;border-radius:10px;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.35);cursor:pointer';
+  b.textContent='⚠ '+TR('@default_pw_warn');
+  b.onclick=()=>b.remove();
+  document.body.appendChild(b);
+}
+/** Prepínač „Monitorovať zariadenie" sa uloží okamžite. */
+function bindMonitorToggle(){
+  const cb=$('e-mon'); if(!cb||!canEdit()) return;
+  cb.onchange=async()=>{
+    const want=cb.checked;
+    const r=await api.post('toggle_monitor',{id:curDev,monitored:want?1:0}).catch(()=>({error:TR('Chyba prenosu')}));
+    const em=$('e-msg');
+    if(r&&r.ok){ if(em) em.innerHTML='<span class="st-up">'+TR(want?'Monitoring zapnutý.':'Monitoring vypnutý.')+'</span>';
+                 loadSummary(); loadAlerts(); if(S.mapId) selectMap(S.mapId); }
+    else { cb.checked=!want; if(em) em.innerHTML='<span class="st-down">'+esc((r&&r.error)||TR('Chyba'))+'</span>'; }
+  };
 }
 async function saveDevice(){
   const r=await api.post('update_device',{id:curDev,name:$('e-name').value,ip:$('e-ip').value,
@@ -986,7 +1044,7 @@ $('canvas').addEventListener('dblclick',e=>{
       }else{
         // ťuk na uzol
         const n=ts.n;e.preventDefault();
-        if(S.mode==='delete'){ if(n.kind==='device'&&confirm(TR('Zmazať uzol?'))){api.post('del_node',{node:n.id}).then(()=>selectMap(S.mapId));} }
+        if(S.mode==='delete'){ if(n.kind==='device'&&confirm(TR('Zmazať uzol?')+'\n\n'+TR('@del_node_hint'))){api.post('del_node',{node:n.id}).then(()=>selectMap(S.mapId));} }
         else if(S.mode==='link'&&n.kind==='device'){
           if(S.linkFrom===null){S.linkFrom=n.id;S.sel=n.id;render();document.getElementById('mode').textContent=TR('Spoj: ťukni druhý uzol');}
           else if(S.linkFrom!==n.id){api.post('add_link',{map:S.mapId,from:S.linkFrom,to:n.id}).then(()=>{S.linkFrom=null;selectMap(S.mapId);});}
