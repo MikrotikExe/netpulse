@@ -40,6 +40,7 @@ function dude_import(string $path): array {
 
     $p = $pdo->prepare($repl('probes') . '(id,name,type,port,dns_name) VALUES(?,?,?,?,?)');
     foreach ($data['probes'] as $x) $p->execute([$x['id'],$x['name'],$x['type'],$x['port'],$x['dns_name']]);
+    np_ensure_builtin_probes($pdo);   // napr. https 443 – Dude ju nemá
 
     $ltp = $pdo->prepare($repl('link_types') . '(id,name,style,thickness) VALUES(?,?,?,?)');
     foreach ($data['link_types'] as $id=>$x) $ltp->execute([$id,$x['name'],$x['style'],$x['thickness']]);

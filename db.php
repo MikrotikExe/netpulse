@@ -189,7 +189,7 @@ function np_cli_guard(): void {
 
 /** Verzia schémy – zvýš pri každej zmene migrate(). Keď DB už má túto verziu,
  *  migrácie sa preskočia (inak by sa pri každej požiadavke skúšalo ~20× ALTER TABLE). */
-const NP_SCHEMA_VERSION = 5;
+const NP_SCHEMA_VERSION = 6;
 
 /** Idempotentné migrácie – doplní chýbajúce stĺpce, tabuľky a indexy v existujúcich DB. */
 function migrate(): void {
@@ -266,8 +266,21 @@ function migrate(): void {
               ['link_traffic','ctype'],['link_traffic','uptime'],['notify_queue','next_try'],['login_fail','ts']] as [$t,$c]) {
         if (!np_column_exists($pdo, $t, $c)) { $failed = true; error_log("NetPulse migrate: chýba $t.$c"); }
     }
+    try { np_ensure_builtin_probes($pdo); } catch (Throwable $e) { $failed = true; error_log('NetPulse migrate sondy: '.$e->getMessage()); }
     if ($failed) { error_log('NetPulse migrate: nedokončené – zopakuje sa pri ďalšom behu'); return; }
     try { setting_set('schema_ver', (string)NP_SCHEMA_VERSION); } catch (Throwable $e) {}
+}
+
+/** Vstavané sondy, ktoré v Dude chýbajú (napr. HTTPS). Pridajú sa len ak rovnaký typ+port ešte neexistuje. */
+function np_ensure_builtin_probes(PDO $pdo): void {
+    $builtin = [['https', 'tcp', 443]];
+    $chk = $pdo->prepare('SELECT COUNT(*) FROM probes WHERE type=? AND port=?');
+    foreach ($builtin as [$name, $type, $port]) {
+        $chk->execute([$type, $port]);
+        if ((int)$chk->fetchColumn() > 0) continue;
+        $id = (int)$pdo->query('SELECT COALESCE(MAX(id),1000000)+1 FROM probes')->fetchColumn();
+        $pdo->prepare('INSERT INTO probes(id,name,type,port,dns_name) VALUES(?,?,?,?,NULL)')->execute([$id, $name, $type, $port]);
+    }
 }
 
 function np_column_exists(PDO $pdo, string $t, string $c): bool {
