@@ -14,6 +14,7 @@
 
   const DICT={
   en:{
+    "Spôsob kontroly":"Check method","Automaticky (ako Dude)":"Automatic (like Dude)","len služby":"services only","ping + služby":"ping + services","Ping + služby (stačí čokoľvek)":"Ping + services (any is enough)","Len služby (musia odpovedať všetky, bez pingu)":"Services only (all must respond, no ping)",
     "Otestovať teraz":"Test now","Testujem ping a služby…":"Testing ping and services…","odpovedá":"responds","neodpovedá":"no response","vypnutá":"disabled","Kontroluje":"Checks","@svc_down_hint":"The device is alive, but a service does not respond. If you no longer use that service (e.g. The Dude on port 2210), delete it in the Services tab.",
     "Zmazať zariadenie":"Delete device","@del_device_hint":"It will be removed from all maps and from monitoring, including its services and history.",
     "@del_node_hint":"If the device is only on this map, it is also removed from monitoring.",
@@ -98,6 +99,7 @@
     "@iv_saved":"Saved. Map refresh applies now, measurement from the next poller cycle."
   },
   cs:{
+    "Spôsob kontroly":"Způsob kontroly","Automaticky (ako Dude)":"Automaticky (jako Dude)","len služby":"jen služby","ping + služby":"ping + služby","Ping + služby (stačí čokoľvek)":"Ping + služby (stačí cokoli)","Len služby (musia odpovedať všetky, bez pingu)":"Jen služby (musí odpovídat všechny, bez pingu)",
     "Otestovať teraz":"Otestovat nyní","Testujem ping a služby…":"Testuji ping a služby…","odpovedá":"odpovídá","neodpovedá":"neodpovídá","vypnutá":"vypnutá","Kontroluje":"Kontroluje","@svc_down_hint":"Zařízení žije, ale služba neodpovídá. Pokud ji už nepoužíváš (např. The Dude na portu 2210), smaž ji v záložce Služby.",
     "Zmazať zariadenie":"Smazat zařízení","@del_device_hint":"Odstraní se ze všech map i z monitoringu, včetně služeb a historie.",
     "@del_node_hint":"Pokud je zařízení jen na této mapě, odstraní se i z monitoringu.",
@@ -177,6 +179,7 @@
     "@iv_saved":"Uloženo. Obnova mapy platí hned, měření od dalšího cyklu polleru."
   },
   de:{
+    "Spôsob kontroly":"Prüfmethode","Automaticky (ako Dude)":"Automatisch (wie Dude)","len služby":"nur Dienste","ping + služby":"Ping + Dienste","Ping + služby (stačí čokoľvek)":"Ping + Dienste (eins genügt)","Len služby (musia odpovedať všetky, bez pingu)":"Nur Dienste (alle müssen antworten, kein Ping)",
     "Otestovať teraz":"Jetzt testen","Testujem ping a služby…":"Teste Ping und Dienste…","odpovedá":"antwortet","neodpovedá":"keine Antwort","vypnutá":"deaktiviert","Kontroluje":"Prüft","@svc_down_hint":"Das Gerät ist erreichbar, aber ein Dienst antwortet nicht. Wird er nicht mehr genutzt (z. B. The Dude auf Port 2210), lösche ihn im Reiter Dienste.",
     "Zmazať zariadenie":"Gerät löschen","@del_device_hint":"Es wird von allen Karten und aus der Überwachung entfernt, samt Diensten und Verlauf.",
     "@del_node_hint":"Ist das Gerät nur auf dieser Karte, wird es auch aus der Überwachung entfernt.",
@@ -256,6 +259,7 @@
     "@iv_saved":"Gespeichert. Kartenaktualisierung gilt sofort, Messung ab dem nächsten Poller-Zyklus."
   },
   pl:{
+    "Spôsob kontroly":"Sposób sprawdzania","Automaticky (ako Dude)":"Automatycznie (jak Dude)","len služby":"tylko usługi","ping + služby":"ping + usługi","Ping + služby (stačí čokoľvek)":"Ping + usługi (wystarczy cokolwiek)","Len služby (musia odpovedať všetky, bez pingu)":"Tylko usługi (wszystkie muszą odpowiadać, bez pingu)",
     "Otestovať teraz":"Testuj teraz","Testujem ping a služby…":"Testuję ping i usługi…","odpovedá":"odpowiada","neodpovedá":"brak odpowiedzi","vypnutá":"wyłączona","Kontroluje":"Sprawdza","@svc_down_hint":"Urządzenie działa, ale usługa nie odpowiada. Jeśli jej już nie używasz (np. The Dude na porcie 2210), usuń ją w zakładce Usługi.",
     "Zmazať zariadenie":"Usuń urządzenie","@del_device_hint":"Zostanie usunięte ze wszystkich map i z monitorowania, łącznie z usługami i historią.",
     "@del_node_hint":"Jeśli urządzenie jest tylko na tej mapie, zostanie usunięte także z monitorowania.",
@@ -335,6 +339,7 @@
     "@iv_saved":"Zapisano. Odświeżanie mapy działa od razu, pomiar od następnego cyklu pollera."
   },
   hu:{
+    "Spôsob kontroly":"Ellenőrzés módja","Automaticky (ako Dude)":"Automatikus (mint a Dude)","len služby":"csak szolgáltatások","ping + služby":"ping + szolgáltatások","Ping + služby (stačí čokoľvek)":"Ping + szolgáltatások (bármelyik elég)","Len služby (musia odpovedať všetky, bez pingu)":"Csak szolgáltatások (mindnek válaszolnia kell, ping nélkül)",
     "Otestovať teraz":"Tesztelés most","Testujem ping a služby…":"Ping és szolgáltatások tesztelése…","odpovedá":"válaszol","neodpovedá":"nem válaszol","vypnutá":"kikapcsolva","Kontroluje":"Ellenőrzi","@svc_down_hint":"Az eszköz elérhető, de egy szolgáltatás nem válaszol. Ha már nem használod (pl. The Dude a 2210-es porton), töröld a Szolgáltatások fülön.",
     "Zmazať zariadenie":"Eszköz törlése","@del_device_hint":"Minden térképről és a megfigyelésből is törlődik, a szolgáltatásokkal és előzményekkel együtt.",
     "@del_node_hint":"Ha az eszköz csak ezen a térképen szerepel, a megfigyelésből is törlődik.",

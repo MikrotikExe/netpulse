@@ -228,6 +228,8 @@ php diag2.php 2026-09-19        # outage detection lag and gaps in monitoring fo
 
 **Alerts arrive late, or not at all.** Run `php diag2.php <date>`. The *lag* column is the delay between a device going silent and the outage being declared; roughly `DOWN_AFTER` plus one cycle is normal. Large *gaps* mean the monitor was not running at all — check `journalctl -u netpulse-monitor` for that window.
 
+**Monitoring a port behind another device.** Each device has a *check method* (device window → General): *Automatic* (default, like The Dude — a device without a ping service is not pinged, only its ports decide), *Ping + services* (up if ping or any service answers) and *Services only* (up only if **all** its services answer, never pinged). Use *Services only* for things like a camera or switch reached through a port-forward on an antenna's IP — otherwise the antenna answering ping would hide the outage.
+
 **A service is red but the device is green.** The device answers ping, but one of its services does not — e.g. an imported *dude* probe that checks TCP port 2210 of a server that no longer runs The Dude. The *Services* list shows what each service checks, and *Tools → Test now* in the device window runs ping and every service check on the spot. Delete services you no longer need.
 
 **No alert for a short outage.** Outages shorter than `DOWN_AFTER` never turn red and never notify, by design. Lower it in `config.php` if you want to catch brief drops, at the cost of more messages from flapping devices.

@@ -791,6 +791,12 @@ async function loadDeviceDialog(){
       <label>${TR('Heslo')}<input id="e-pass" type="password" value="${esc(dev.password||'')}"></label>
       <label>${TR('Stav')}<input value="${statusSk(dev.status)}" disabled></label>
     </div>
+    <label style="margin:2px 2px 8px">${TR('Spôsob kontroly')}
+      <select id="e-check">
+        <option value="auto" ${!dev.check_mode?'selected':''}>${TR('Automaticky (ako Dude)')} – ${dev.check_effective==='services'?TR('len služby'):TR('ping + služby')}</option>
+        <option value="ping" ${dev.check_mode==='ping'?'selected':''}>${TR('Ping + služby (stačí čokoľvek)')}</option>
+        <option value="services" ${dev.check_mode==='services'?'selected':''}>${TR('Len služby (musia odpovedať všetky, bez pingu)')}</option>
+      </select></label>
     <label class="chk" style="margin:4px 2px 12px"><input type="checkbox" id="e-mon" ${String(dev.monitored)==='0'?'':'checked'}> ${TR('Monitorovať zariadenie')} <span style="color:var(--muted)">${TR('(vypnuté = sivé)')}</span></label>
     <div class="modal-actions"><button class="btn" id="e-save">${TR('Uložiť')}</button>${canEdit()?`<button class="btn danger" id="e-del" style="margin-left:auto">${TR('Zmazať zariadenie')}</button>`:''}</div>
     <div id="e-msg" style="margin-top:8px;font-size:13px"></div>`;
@@ -834,7 +840,8 @@ async function loadDeviceDialog(){
     if(!r||r.error){ box.textContent=(r&&r.error)||TR('Chyba'); return; }
     const lines=r.results.map(x=>(x.ok?'✓ ':'✗ ')+x.check+' – '+(x.ok?TR('odpovedá')+(x.ms!=null?' ('+x.ms+' ms)':''):TR('neodpovedá'))+(x.service&&!x.enabled?' ['+TR('vypnutá')+']':''));
     const pingOk=r.results.some(x=>!x.service&&x.ok), svcBad=r.results.some(x=>x.service&&!x.ok&&x.enabled);
-    if(pingOk&&svcBad) lines.push('', TR('@svc_down_hint'));
+    lines.push('', TR('Spôsob kontroly')+': '+(r.mode==='services'?TR('len služby'):TR('ping + služby'))+' => '+(r.up?'✓ '+TR('funkčné'):'✗ '+TR('nefunkčné')));
+    if(pingOk&&svcBad&&r.mode!=='services') lines.push('', TR('@svc_down_hint'));
     if(!r.results.length) lines.push(TR('Žiadne služby'));
     box.textContent=lines.join('\n');
   };
@@ -881,6 +888,7 @@ async function saveDevice(){
   const r=await api.post('update_device',{id:curDev,name:$('e-name').value,ip:$('e-ip').value,
     dns:$('e-dns').value,type_id:$('e-type').value,username:$('e-user').value,
     monitored:$('e-mon').checked?1:0, snmp_profile:$('e-snmp')?$('e-snmp').value:'',
+    check_mode:$('e-check')?$('e-check').value:'auto',
     password:$('e-pass')?$('e-pass').value:''});
   const em=$('e-msg'); if(em) em.innerHTML=r.ok?'<span class="st-up">'+TR('Uložené.')+'</span>':'<span class="st-down">'+esc(r.error||TR('Chyba'))+'</span>';
   if(r.ok){ loadMaps(); if(S.mapId) await selectMap(S.mapId);

@@ -74,39 +74,46 @@ try {
     });
 } catch (Throwable $e) { error_log('NetPulse údržba: '.$e->getMessage()); }
 
-$devs = db_retry(fn() => $pdo->query("SELECT id,name,ip,status,down_since,down_ts,notified,last_check FROM devices
+$devs = db_retry(fn() => $pdo->query("SELECT id,name,ip,status,down_since,down_ts,notified,last_check,check_mode FROM devices
                      WHERE ip IS NOT NULL AND ip<>'' AND (monitored=1 OR monitored IS NULL)")->fetchAll());
 if ($devs === null) { fwrite(STDERR, "Zoznam zariadení sa nepodarilo načítať (DB zamknutá) – cyklus preskočený\n"); exit(0); }
 // prázdny zoznam: sondovanie a zápis sa preskočia, fronta správ a upratovanie bežia ďalej
 $devById = []; foreach ($devs as $d) $devById[$d['id']] = $d;
 $svcRows = db_retry(fn() => $pdo->query("SELECT id,device_id,ptype,port FROM services WHERE enabled=1 OR enabled IS NULL")->fetchAll()) ?: [];
+$svcByDev = []; foreach ($svcRows as $sv) $svcByDev[$sv['device_id']][] = $sv;
 
 // ======================================================================
 // 1) SONDOVANIE – bez zápisu do databázy
 // ======================================================================
 $now = date('Y-m-d H:i:s'); $nowTs = time();          // čas merania
-$res = [];                                             // id => ping, reach, rtt
-$bad = 0;
+$res = [];                                             // id => mode, ping, reach, rtt, valid
+$bad = 0; $svcOnly = 0;
 $hosts = [];
 foreach ($devs as $d) {
     $ok = np_valid_host($d['ip']);
     if (!$ok) $bad++;
-    $res[$d['id']] = ['ping' => false, 'reach' => false, 'rtt' => null, 'valid' => $ok];
-    if ($ok) $hosts[$d['ip']] = true;
+    $mode = np_effective_mode($d['check_mode'] ?? null, $svcByDev[$d['id']] ?? []);
+    if ($mode === 'services') $svcOnly++;
+    $res[$d['id']] = ['mode' => $mode, 'ping' => false, 'reach' => false, 'rtt' => null, 'valid' => $ok];
+    // pinguj len zariadenia, pri ktorých ping rozhoduje (alebo majú službu ping)
+    $needPing = $mode === 'ping';
+    foreach ($svcByDev[$d['id']] ?? [] as $sv) if ($sv['ptype'] === 'icmp') $needPing = true;
+    if ($ok && $needPing) $hosts[$d['ip']] = true;
 }
 if ($useFping) {
-    $alive = fping_batch(array_keys($hosts), max(300, $pt * 1000));
-    foreach ($devs as $d) if (array_key_exists($d['ip'], $alive)) {
-        $res[$d['id']]['ping'] = $res[$d['id']]['reach'] = true; $res[$d['id']]['rtt'] = $alive[$d['ip']];
+    $alive = $hosts ? fping_batch(array_keys($hosts), max(300, $pt * 1000)) : [];
+    foreach ($devs as $d) if (isset($hosts[$d['ip']]) && array_key_exists($d['ip'], $alive)) {
+        $res[$d['id']]['ping'] = true; $res[$d['id']]['rtt'] = $alive[$d['ip']];
     }
 } elseif ($useIcmp) {                                  // bez fping: po jednom (pomalšie)
+    $pinged = [];
     foreach ($devs as $d) {
-        if (!$res[$d['id']]['valid']) continue;
-        $o = []; @exec('ping -c 1 -W ' . $pt . ' ' . escapeshellarg($d['ip']) . ' 2>/dev/null', $o, $rc);
-        if ($rc === 0) {
-            $res[$d['id']]['ping'] = $res[$d['id']]['reach'] = true;
-            if (preg_match('/time[=<]([\d.]+)/', implode("\n", $o), $m)) $res[$d['id']]['rtt'] = (float)$m[1];
+        if (!$res[$d['id']]['valid'] || !isset($hosts[$d['ip']])) continue;
+        if (!array_key_exists($d['ip'], $pinged)) {
+            $o = []; @exec('ping -c 1 -W ' . $pt . ' ' . escapeshellarg($d['ip']) . ' 2>/dev/null', $o, $rc);
+            $pinged[$d['ip']] = ($rc === 0) ? (preg_match('/time[=<]([\d.]+)/', implode("\n", $o), $m) ? (float)$m[1] : -1.0) : null;
         }
+        if ($pinged[$d['ip']] !== null) { $res[$d['id']]['ping'] = true; $res[$d['id']]['rtt'] = $pinged[$d['ip']] >= 0 ? $pinged[$d['ip']] : null; }
     }
 }
 // služby zariadení
@@ -123,18 +130,35 @@ foreach ($svcRows as $sv) {
 }
 $tcpOk = $tcpT ? tcp_probe_batch($tcpT, $tcpTo) : [];
 foreach ($svcRows as $sv) {
-    if (!isset($devById[$sv['device_id']])) continue;
-    $id = $sv['device_id'];
-    if ($sv['ptype'] === 'tcp' && $res[$id]['valid']) {
-        $u = isset($tcpOk['s' . $sv['id']]); $svcUp[$sv['id']] = $u;
-        if ($u && $res[$id]['rtt'] === null) $res[$id]['rtt'] = $tcpOk['s' . $sv['id']];
-    }
-    if (!empty($svcUp[$sv['id']])) $res[$id]['reach'] = true;
+    if (!isset($devById[$sv['device_id']]) || !$res[$sv['device_id']]['valid']) continue;
+    if ($sv['ptype'] === 'tcp') $svcUp[$sv['id']] = isset($tcpOk['s' . $sv['id']]);
 }
-// posledná záchrana – záložné porty (winbox/web…), všetky nedostupné zariadenia naraz
+// vyhodnotenie podľa spôsobu kontroly
+foreach ($devs as $d) {
+    $id = $d['id']; $r = &$res[$id];
+    if (!$r['valid']) { unset($r); continue; }
+    $eval = array_filter($svcByDev[$id] ?? [], fn($s) => in_array($s['ptype'], ['icmp','tcp','dns','snmp'], true));
+    if ($r['mode'] === 'services') {
+        // len služby: musia odpovedať všetky – výpadok jediného portu = výpadok zariadenia
+        $all = (bool)$eval;
+        foreach ($eval as $s) if (empty($svcUp[$s['id']])) { $all = false; break; }
+        $r['reach'] = $all;
+        if ($r['rtt'] === null) foreach ($eval as $s) if (isset($tcpOk['s' . $s['id']])) { $r['rtt'] = $tcpOk['s' . $s['id']]; break; }
+        if (!$all) $r['rtt'] = null;
+    } else {
+        // ping + služby: stačí ping alebo ktorákoľvek služba
+        $r['reach'] = $r['ping'];
+        foreach ($svcByDev[$id] ?? [] as $s) if (!empty($svcUp[$s['id']])) {
+            $r['reach'] = true;
+            if ($r['rtt'] === null && isset($tcpOk['s' . $s['id']])) $r['rtt'] = $tcpOk['s' . $s['id']];
+        }
+    }
+    unset($r);
+}
+// posledná záchrana – záložné porty (winbox/web…), len pri kontrole pingom, všetky naraz
 if ($method === 'auto') {
     $fb = [];
-    foreach ($devs as $d) if (!$res[$d['id']]['reach'] && $res[$d['id']]['valid'])
+    foreach ($devs as $d) if ($res[$d['id']]['mode'] === 'ping' && !$res[$d['id']]['reach'] && $res[$d['id']]['valid'])
         foreach ($fallbackPorts as $p) $fb[$d['id'] . ':' . (int)$p] = [$d['ip'], (int)$p];
     foreach (($fb ? tcp_probe_batch($fb, $tcpTo) : []) as $k => $ms) {
         $id = (int) strtok($k, ':');
@@ -247,5 +271,6 @@ fwrite(STDERR, sprintf('%d zariadení skontrolovaných (%s) @ %s  [%.1f s]', cou
     . ($tr['down'] || $tr['up'] ? "  výpadky: +{$tr['down']} / návraty: +{$tr['up']}" : '')
     . ($tg[0] || $tg[1] ? "  Telegram: odoslané {$tg[0]}" . ($tg[1] ? ", zlyhalo – čaká {$tg[2]}" : '') : '')
     . ($bad ? "  [$bad zariadení s neplatnou IP/DNS]" : '')
+    . ($svcOnly ? "  [$svcOnly len cez služby/porty]" : '')
     . (($jm !== 'wal' && !np_is_mysql()) ? "  !! journal_mode=$jm (nie WAL – hrozia zámky)" : '')
     . "\n");

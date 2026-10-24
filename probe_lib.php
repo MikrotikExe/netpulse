@@ -77,3 +77,17 @@ function snmp_check(string $host, int $port): bool {
     if (function_exists('snmpget')) { $r = @snmpget("$host:$port", 'public', '1.3.6.1.2.1.1.1.0', 1000000, 1); return $r !== false; }
     return false;
 }
+
+/** Spôsob kontroly zariadenia (stĺpec devices.check_mode):
+ *   'ping'     – ping + služby: funkčné, ak odpovie ping ALEBO ktorákoľvek služba (aj záložné porty),
+ *   'services' – len služby: funkčné, iba ak odpovedajú VŠETKY jeho služby; nepinguje sa,
+ *   'auto'     – ako The Dude (predvolené): kto nemá službu ping, ten sa nepinguje a rozhodujú porty.
+ *  Služby, ktoré NetPulse nevie vyhodnotiť (cpu/disk z Dude agenta…), sa nerátajú;
+ *  zariadenie bez vyhodnotiteľných služieb sa vždy kontroluje pingom. */
+function np_effective_mode(?string $mode, array $svcs): string {
+    $eval = array_filter($svcs, fn($s) => in_array($s['ptype'] ?? '', ['icmp','tcp','dns','snmp'], true));
+    if (!$eval) return 'ping';
+    if ($mode === 'ping' || $mode === 'services') return $mode;
+    foreach ($eval as $s) if ($s['ptype'] === 'icmp') return 'ping';
+    return 'services';
+}

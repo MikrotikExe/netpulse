@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS devices(
   id INTEGER PRIMARY KEY, name TEXT, ip TEXT, dns TEXT,
   snmp_profile INTEGER, username TEXT, password TEXT, type_id INTEGER,
   status TEXT DEFAULT 'unknown', last_check TEXT, rtt REAL, down_since TEXT, down_ts INTEGER,
-  monitored INTEGER DEFAULT 1, notified TEXT);
+  monitored INTEGER DEFAULT 1, notified TEXT, check_mode TEXT);
 CREATE TABLE IF NOT EXISTS map_nodes(
   id INTEGER PRIMARY KEY, map_id INTEGER, kind TEXT DEFAULT 'device',
   device_id INTEGER, submap_id INTEGER, x INTEGER, y INTEGER, image INTEGER, label TEXT);
